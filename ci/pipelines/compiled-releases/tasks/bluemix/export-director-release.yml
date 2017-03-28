@@ -1,0 +1,29 @@
+---
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: bosh/compiled-release
+
+inputs:
+  - name: bosh-src
+  - name: stemcell
+  - name: bosh-release
+  - name: bosh-softlayer-cpi-release
+  - name: director-state
+  - name: bosh-cli
+
+outputs:
+  - name: compiled-release
+
+run:
+  path: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/export-director-release.sh
+
+params:
+  SL_VM_PREFIX:         replace-me
+  SL_API_KEY:           replace-me
+  SL_DATACENTER:        replace-me
+  SL_VLAN_PUBLIC:       replace-me
+  SL_VLAN_PRIVATE:      replace-me
+  SL_USERNAME:          replace-me

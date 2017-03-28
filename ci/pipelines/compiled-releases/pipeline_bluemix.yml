@@ -1,0 +1,119 @@
+resources:
+  - name: bosh-cli
+    type: s3
+    source:
+      regexp: bosh-cli-([0-9.]+)-linux-amd64
+      bucket: bosh-cli-artifacts
+      region_name: us-east-1
+
+  - name: bosh-src
+    type: git
+    source:
+      uri: https://github.com/bluebosh/bosh.git
+      branch: master
+
+  - name: bosh-softlayer-cpi-release
+    type: bosh-io-release
+    source:
+      repository: cloudfoundry/bosh-softlayer-cpi-release
+
+  #
+  # releases to compile
+  #
+  - name: bosh-release
+    type: bosh-io-release
+    source:
+      repository: cloudfoundry/bosh
+
+  #
+  # stemcells to compile on
+  #
+
+  - name: light-stemcell
+    type: s3
+    source:
+      regexp: light-bosh-stemcell-(\d+\.\d+)-hvm-softlayer-xen-ubuntu-trusty-go_agent\.tgz
+      bucket: bosh-softlayer-stemcells-bluemix
+      access_key_id: {{s3_access_key_id}}
+      secret_access_key: {{s3_secret_access_key}}
+
+  - name: director-state
+    type: s3
+    source:
+      versioned_file: director-state.tgz
+      bucket: bosh-softlayer-compiled-release-tarballs
+      access_key_id: {{s3_access_key_id}}
+      secret_access_key: {{s3_secret_access_key}}
+
+  - name: bosh-latest-on-light-stemcell-latest
+    type: s3
+    source:
+      regexp: bosh-([0-9.]+)-ubuntu-trusty-([0-9.]+)-(.*)\.tgz
+      bucket: bosh-softlayer-compiled-release-tarballs
+      access_key_id: {{s3_access_key_id}}
+      secret_access_key: {{s3_secret_access_key}}
+
+jobs:
+  - name: prepare-director
+    plan:
+      - aggregate:
+          - get: bosh-src
+          - get: bosh-release
+            trigger: true
+          - get: bosh-softlayer-cpi-release
+          - get: light-stemcell
+            trigger: true
+          - get: bosh-cli
+      - task: deploy-director
+        file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/create-bosh-env.yml
+        input_mapping:
+          stemcell: light-stemcell
+        params:
+          SL_USERNAME: {{softlayer_username}}
+          SL_API_KEY: {{softlayer_api_key}}
+          SL_DATACENTER: {{softlayer_datacenter}}
+          SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
+          SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
+          SL_VM_PREFIX: {{softlayer_director_name_prefix}}
+
+      - put: director-state
+        params:
+          file: "director-state/director-state.tgz"
+
+  - name: export-director-release
+    plan:
+      - aggregate:
+          - get: bosh-src
+          - get: bosh-release
+          - get: bosh-softlayer-cpi-release
+          - get: light-stemcell
+          - get: bosh-cli
+          - get: director-state
+            passed: [prepare-director]
+            trigger: true
+      - task: export-director-release
+        file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/export-director-release.yml
+        input_mapping:
+          stemcell: light-stemcell
+        params:
+          SL_USERNAME: {{softlayer_username}}
+          SL_API_KEY: {{softlayer_api_key}}
+          SL_DATACENTER: {{softlayer_datacenter}}
+          SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
+          SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
+          SL_VM_PREFIX: {{softlayer_director_name_prefix}}
+        ensure:
+          do:
+          - task: teardown
+            file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/delete-bosh-env.yml
+            params:
+              SL_USERNAME: {{softlayer_username}}
+              SL_API_KEY: {{softlayer_api_key}}
+              SL_DATACENTER: {{softlayer_datacenter}}
+              SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
+              SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
+              SL_VM_PREFIX: {{softlayer_director_name_prefix}}
+
+      - put: bosh-latest-on-light-stemcell-latest
+        params:
+          file: compiled-release/bosh/*\.tgz
