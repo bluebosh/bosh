@@ -26,14 +26,14 @@ chmod +x ${BOSH_CLI}
   function finish {
     echo "Final state of director deployment:"
     echo "====================================================================="
-    cat ${deployment_dir}/bosh-template-state.json
+    cat bosh-template-state.json
     echo "====================================================================="
     echo "Director:"
     echo "====================================================================="
     cat /etc/hosts | grep "$SL_VM_DOMAIN" | tee ${deployment_dir}/director-hosts
     echo "====================================================================="
     echo "Saving config..."
-    cp $BOSH_CLI bosh-template.yml ${deployment_dir}/
+    cp $BOSH_CLI bosh-template.yml bosh-template-state.json ${deployment_dir}/
     pushd ${deployment_dir}
       tar -zcvf  /tmp/director-state.tgz ./ >/dev/null 2>&1
     popd
@@ -46,7 +46,7 @@ echo "Using bosh-cli $($BOSH_CLI -v)"
 echo "Deploying director..."
 
 $BOSH_CLI create-env bosh-template.yml \
-                      --state=${deployment_dir}/bosh-template-state.json \
+                      --state=bosh-template-state.json \
                       --vars-store ${deployment_dir}/credentials.yml \
                       -v SL_VM_PREFIX=${SL_VM_PREFIX} \
                       -v SL_VM_DOMAIN=${SL_VM_DOMAIN} \

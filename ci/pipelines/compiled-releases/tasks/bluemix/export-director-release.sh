@@ -40,7 +40,7 @@ $BOSH_CLI -e bosh-env upload-release bosh-release/release.tgz
 $BOSH_CLI -e bosh-env upload-release bosh-softlayer-cpi-release/release.tgz
 
 DIRECTOR=$(cat director-state/director-hosts |awk '{print $1}')
-DIRECTOR_UUID=$(cat director-deploy-state.json |grep director_id| cut -d"\"" -f4)
+DIRECTOR_UUID=$(cat bosh-template-state.json |grep director_id| cut -d"\"" -f4)
 BOSH_VERSION=$(cat bosh-release/version)
 CPI_VERSION=$(cat bosh-softlayer-cpi-release/version)
 STEMCELL_NAME=$($BOSH_CLI -e bosh-env stemcells|grep ubuntu-trusty|awk '{print $1}')

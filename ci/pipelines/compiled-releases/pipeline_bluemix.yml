@@ -10,7 +10,7 @@ resources:
     type: git
     source:
       uri: https://github.com/bluebosh/bosh.git
-      branch: master
+      branch: compiled-cf
 
   - name: bosh-softlayer-cpi-release
     type: bosh-io-release
@@ -32,7 +32,7 @@ resources:
   - name: light-stemcell
     type: s3
     source:
-      regexp: light-bosh-stemcell-(\d+\.\d+)-hvm-softlayer-xen-ubuntu-trusty-go_agent\.tgz
+      regexp: light-bosh-stemcell-(\d+\.\d+\.\d+)-softlayer-xen-ubuntu-trusty-go_agent\.tgz
       bucket: bosh-softlayer-stemcells-bluemix
       access_key_id: {{s3_access_key_id}}
       secret_access_key: {{s3_secret_access_key}}
@@ -49,6 +49,14 @@ resources:
     type: s3
     source:
       regexp: bosh-([0-9.]+)-ubuntu-trusty-([0-9.]+)-(.*)\.tgz
+      bucket: bosh-softlayer-compiled-release-tarballs
+      access_key_id: {{s3_access_key_id}}
+      secret_access_key: {{s3_secret_access_key}}
+
+  - name: complied-cf-release
+    type: s3
+    source:
+      regexp: cf-(.*)-ubuntu-trusty-([0-9.]+)-(.*)\.tgz
       bucket: bosh-softlayer-compiled-release-tarballs
       access_key_id: {{s3_access_key_id}}
       secret_access_key: {{s3_secret_access_key}}
@@ -90,7 +98,7 @@ jobs:
           - get: bosh-cli
           - get: director-state
             passed: [prepare-director]
-            trigger: true
+#            trigger: true
       - task: export-director-release
         file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/export-director-release.yml
         input_mapping:
@@ -102,18 +110,73 @@ jobs:
           SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
           SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
           SL_VM_PREFIX: {{softlayer_director_name_prefix}}
-        ensure:
-          do:
-          - task: teardown
-            file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/delete-bosh-env.yml
-            params:
-              SL_USERNAME: {{softlayer_username}}
-              SL_API_KEY: {{softlayer_api_key}}
-              SL_DATACENTER: {{softlayer_datacenter}}
-              SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
-              SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
-              SL_VM_PREFIX: {{softlayer_director_name_prefix}}
+#        ensure:
+#          do:
+#          - task: teardown
+#            file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/delete-bosh-env.yml
+#            params:
+#              SL_USERNAME: {{softlayer_username}}
+#              SL_API_KEY: {{softlayer_api_key}}
+#              SL_DATACENTER: {{softlayer_datacenter}}
+#              SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
+#              SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
+#              SL_VM_PREFIX: {{softlayer_director_name_prefix}}
 
       - put: bosh-latest-on-light-stemcell-latest
         params:
           file: compiled-release/bosh/*\.tgz
+
+  - name: export-cf-release
+    plan:
+      - aggregate:
+          - get: bosh-src
+          - get: light-stemcell
+          - get: bosh-cli
+          - get: director-state
+            passed: [prepare-director]
+      - task: export-cf-release
+        file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/export-cf-release.yml
+        input_mapping:
+          stemcell: light-stemcell
+        params:
+          SL_USERNAME: {{softlayer_username}}
+          SL_API_KEY: {{softlayer_api_key}}
+          SL_DATACENTER: {{softlayer_datacenter}}
+          SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
+          SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
+          SL_VM_PREFIX: {{softlayer_director_name_prefix}}
+          cf_release: {{cf_release}}
+          cf_release_version: {{cf_release_version}}
+          cf_services_release: {{cf_services_release}}
+          cf_services_release_version: {{cf_services_release_version}}
+          cf_services_contrib_release: {{cf_services_contrib_release}}
+          cf_services_contrib_release_version: {{cf_services_contrib_release_version}}
+          mod_vms_release: {{mod_vms_release}}
+          mod_vms_release_version: {{mod_vms_release_version}}
+          security_release: {{security_release}}
+          security_release_version: {{security_release_version}}
+          admin_ui_release: {{admin_ui_release}}
+          admin_ui_release_version: {{admin_ui_release_version}}
+          habr_release: {{habr_release}}
+          habr_release_version: {{habr_release_version}}
+          loginserver_release: {{loginserver_release}}
+          loginserver_release_version: {{loginserver_release_version}}
+          marmot_logstash_forwarder_release: {{marmot_logstash_forwarder_release}}
+          marmot_logstash_forwarder_release_version: {{marmot_logstash_forwarder_release_version}}
+          unbound_release: {{unbound_release}}
+          unbound_release_version: {{unbound_release_version}}
+#        ensure:
+#          do:
+#          - task: teardown
+#            file: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/delete-bosh-env.yml
+#            params:
+#              SL_USERNAME: {{softlayer_username}}
+#              SL_API_KEY: {{softlayer_api_key}}
+#              SL_DATACENTER: {{softlayer_datacenter}}
+#              SL_VLAN_PUBLIC: {{softlayer_vlan_public}}
+#              SL_VLAN_PRIVATE: {{softlayer_vlan_private}}
+#              SL_VM_PREFIX: {{softlayer_director_name_prefix}}
+
+      - put: complied-cf-release
+        params:
+          file: compiled-release/cf/*\.tgz

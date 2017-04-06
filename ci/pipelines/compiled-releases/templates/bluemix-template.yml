@@ -1,0 +1,168 @@
+compilation:
+  cloud_properties:
+    Bosh_ip: ((director_ip))
+    Datacenter:
+      Name: ((data_center_name))
+    EphemeralDiskSize: 100
+    HourlyBillingFlag: true
+    LocalDiskFlag: true
+    PrimaryBackendNetworkComponent:
+      NetworkVlan:
+        Id: ((private_vlan_id))
+    PrimaryNetworkComponent:
+      NetworkVlan:
+        Id: ((public_vlan_id))
+    VmNamePrefix: ((deploy_name))-worker-
+  network: default
+  reuse_compilation_vms: true
+  workers: 4
+director_uuid: ((director_uuid))
+disk_pools:
+- disk_size: 20480
+  name: dp_20480
+- disk_size: 40960
+  name: dp_40960
+- disk_size: 409600
+  name: dp_409600
+- disk_size: 512000
+  name: dp_512000
+jobs: []
+name: ((deploy_name))
+networks:
+- cloud_properties:
+    security_groups:
+    - default
+    - cf
+  dns:
+  - ((director_ip))
+  - 10.0.80.11
+  - 10.0.80.12
+  name: default
+  type: dynamic
+releases:
+- location: http://10.106.192.96/releases/cf/((cf-release-version))/cf-release.tgz
+  name: ((cf-release))
+  version: ((cf-release-version))
+- location: http://10.106.192.96/releases/cf-services/((cf-services-release-version))/cf-services-release.tgz
+  name: ((cf-services-release))
+  version: ((cf-services-release-version))
+- location: http://10.106.192.96/releases/cf-services-contrib/((cf-services-contrib-release-version))/cf-services-contrib-release.tgz
+  name: ((cf-services-contrib-release))
+  version: ((cf-services-contrib-release-version))
+- location: http://10.106.192.96/releases/mod-vms/((mod_vms_release_version))/mod-vms-((mod_vms_release_version)).tgz
+  name: ((mod_vms_release))
+  version: ((mod_vms_release_version))
+- location: http://10.106.192.96/releases/security-release/((security_release_version))/security-release.tgz
+  name: ((security_release))
+  version: ((security_release_version))
+- location: http://10.106.192.96/releases/admin-ui/((admin_ui_release_version))/admin-ui.tgz
+  name: ((admin_ui_release))
+  version: ((admin_ui_release_version))
+- location: http://10.106.192.96/releases/cf_backup_ha/((habr_release))/((habr_release_version))/habr-release.tgz
+  name: ((habr_release))
+  version: ((habr_release_version))
+- location: http://10.106.192.96/releases/loginserver/((loginserver_release_version))/loginserver.tgz
+  name: ((loginserver_release))
+  version: ((loginserver_release_version))
+- location: http://10.106.192.96/releases/marmot/marmot-logstash-forwarder/((marmot_logstash_forwarder_release_version))/marmot-logstash-forwarder-bosh-release-((marmot_logstash_forwarder_release_version)).tgz
+  name: ((marmot_logstash_forwarder_release))
+  version: ((marmot_logstash_forwarder_release_version))
+- location: http://10.106.192.96/releases/unbound/((unbound_release_version))/unbound-((unbound_release_version)).tgz
+  name: ((unbound_release))
+  version: ((unbound_release_version))
+resource_pools:
+- cloud_properties:
+    Bosh_ip: ((director_ip))
+    Datacenter:
+      Name: ((data_center_name))
+    DedicatedAccountHostOnlyFlag: false
+    EphemeralDiskSize: 100
+    HourlyBillingFlag: true
+    LocalDiskFlag: true
+    MaxMemory: 8192
+    PrimaryBackendNetworkComponent:
+      NetworkVlan:
+        Id: ((private_vlan_id))
+    PrimaryNetworkComponent:
+      NetworkVlan:
+        Id: ((public_vlan_id))
+    StartCpus: 4
+    VmNamePrefix: ((deploy_name))-core-
+  name: coreNode
+  network: default
+  stemcell:
+    name: bosh-softlayer-xen-ubuntu-trusty-go_agent
+    version: ((stemcell_version))
+- cloud_properties:
+    Bosh_ip: ((director_ip))
+    Datacenter:
+      Name: ((data_center_name))
+    DedicatedAccountHostOnlyFlag: false
+    EphemeralDiskSize: 100
+    HourlyBillingFlag: true
+    LocalDiskFlag: true
+    MaxMemory: 8192
+    PrimaryBackendNetworkComponent:
+      NetworkVlan:
+        Id: ((private_vlan_id))
+    PrimaryNetworkComponent:
+      NetworkVlan:
+        Id: ((public_vlan_id))
+    StartCpus: 4
+    VmNamePrefix: ((deploy_name))-router-
+  name: router
+  network: default
+  stemcell:
+    name: bosh-softlayer-xen-ubuntu-trusty-go_agent
+    version: ((stemcell_version))
+- cloud_properties:
+    Bosh_ip: ((director_ip))
+    Datacenter:
+      Name: ((data_center_name))
+    DedicatedAccountHostOnlyFlag: false
+    EphemeralDiskSize: 300
+    HourlyBillingFlag: true
+    LocalDiskFlag: true
+    MaxMemory: 32768
+    PrimaryBackendNetworkComponent:
+      NetworkVlan:
+        Id: ((private_vlan_id))
+    PrimaryNetworkComponent:
+      NetworkVlan:
+        Id: ((public_vlan_id))
+    StartCpus: 4
+    VmNamePrefix: ((deploy_name))-dea-
+  name: dea
+  network: default
+  stemcell:
+    name: bosh-softlayer-xen-ubuntu-trusty-go_agent
+    version: ((stemcell_version))
+- cloud_properties:
+    Bosh_ip: ((director_ip))
+    Datacenter:
+      Name: ((data_center_name))
+    DedicatedAccountHostOnlyFlag: false
+    EphemeralDiskSize: 100
+    HourlyBillingFlag: true
+    LocalDiskFlag: true
+    MaxMemory: 8192
+    PrimaryBackendNetworkComponent:
+      NetworkVlan:
+        Id: ((private_vlan_id))
+    PrimaryNetworkComponent:
+      NetworkVlan:
+        Id: ((public_vlan_id))
+    StartCpus: 4
+    VmNamePrefix: ((deploy_name))-log-
+  name: logger
+  network: default
+  stemcell:
+    name: bosh-softlayer-xen-ubuntu-trusty-go_agent
+    version: ((stemcell_version))
+update:
+  canaries: 1
+  canary_watch_time: 30000-360000
+  max_errors: 1
+  max_in_flight: 1
+  serial: true
+  update_watch_time: 30000-360000

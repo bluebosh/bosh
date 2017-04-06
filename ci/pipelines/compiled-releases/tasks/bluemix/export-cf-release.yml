@@ -1,0 +1,47 @@
+---
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: bosh/compiled-release
+
+inputs:
+  - name: bosh-src
+  - name: stemcell
+  - name: director-state
+  - name: bosh-cli
+
+outputs:
+  - name: compiled-release
+
+run:
+  path: bosh-src/ci/pipelines/compiled-releases/tasks/bluemix/export-cf-release.sh
+
+params:
+  SL_VM_PREFIX: replace-me
+  SL_API_KEY: replace-me
+  SL_DATACENTER: replace-me
+  SL_VLAN_PUBLIC: replace-me
+  SL_VLAN_PRIVATE: replace-me
+  SL_USERNAME: replace-me
+  cf_release: replace-me
+  cf_release_version: replace-me
+  cf_services_release: replace-me
+  cf_services_release_version: replace-me
+  cf_services_contrib_release: replace-me
+  cf_services_contrib_release_version: replace-me
+  mod_vms_release: replace-me
+  mod_vms_release_version: replace-me
+  security_release: replace-me
+  security_release_version: replace-me
+  admin_ui_release: replace-me
+  admin_ui_release_version: replace-me
+  habr_release: replace-me
+  habr_release_version: replace-me
+  loginserver_release: replace-me
+  loginserver_release_version: replace-me
+  marmot_logstash_forwarder_release: replace-me
+  marmot_logstash_forwarder_release_version: replace-me
+  unbound_release: replace-me
+  unbound_release_version: replace-me
