@@ -22,7 +22,7 @@ fi
 
 echo "Install openssl"
 cd $work_dir
-wget https://www.openssl.org/source/openssl-1.0.2e.tar.gz
+wget https://www.openssl.org/source/openssl-1.0.2k.tar.gz
 tar zxvf openssl-1*.tar.gz
 cd openssl-1*
 export FIPSDIR=/usr/local/ssl/fips-2.0
