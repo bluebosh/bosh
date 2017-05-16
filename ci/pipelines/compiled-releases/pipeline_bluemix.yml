@@ -56,7 +56,7 @@ resources:
   - name: complied-cf-release
     type: s3
     source:
-      regexp: cf-(.*)-ubuntu-trusty-([0-9.]+)-(.*)\.tgz
+      regexp: cf-([0-9.]+)-ibm-(.*)-ubuntu-trusty-([0-9.]+)-(.*)\.tgz
       bucket: bosh-softlayer-compiled-release-tarballs
       access_key_id: {{s3_access_key_id}}
       secret_access_key: {{s3_secret_access_key}}
