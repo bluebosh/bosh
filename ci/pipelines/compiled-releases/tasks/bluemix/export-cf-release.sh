@@ -82,30 +82,36 @@ $BOSH_CLI int bosh-src/ci/pipelines/compiled-releases/templates/bluemix-template
 #
 # upload releases
 #
-releases=$($BOSH_CLI int ${deployment_dir}/${manifest_filename} --path /releases |grep -Po '(?<=- location: ).*')
-while IFS= read -r line; do
-$BOSH_CLI -e bosh-env upload-release $line
-done <<< "$releases"
+#releases=$($BOSH_CLI int ${deployment_dir}/${manifest_filename} --path /releases |grep -Po '(?<=- location: ).*')
+#while IFS= read -r line; do
+#$BOSH_CLI -e bosh-env upload-release $line
+#done <<< "$releases"
 
 #
 # deploy and export
 #
-$BOSH_CLI -e bosh-env -d ${deployment_name} releases
-$BOSH_CLI -e bosh-env -d ${deployment_name} deploy ${deployment_dir}/${manifest_filename} --no-redact -n
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${cf_release}/${cf_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} releases
+#$BOSH_CLI -e bosh-env -d ${deployment_name} deploy ${deployment_dir}/${manifest_filename} --no-redact -n
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${cf_release}/${cf_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+
+#
+# commented these releases for now
+#
 #$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${cf_services_release}/${cf_services_release_version} ubuntu-trusty/${STEMCELL_VERSION}
 #$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${cf_services_contrib_release}/${cf_services_contrib_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${mod_vms_release}/${mod_vms_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${security_release}/${security_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${admin_ui_release}/${admin_ui_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${habr_release}/${habr_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${loginserver_release}/${loginserver_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${marmot_logstash_forwarder_release}/${marmot_logstash_forwarder_release_version} ubuntu-trusty/${STEMCELL_VERSION}
-$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${unbound_release}/${unbound_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${mod_vms_release}/${mod_vms_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${security_release}/${security_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${admin_ui_release}/${admin_ui_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${habr_release}/${habr_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${loginserver_release}/${loginserver_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${marmot_logstash_forwarder_release}/${marmot_logstash_forwarder_release_version} ubuntu-trusty/${STEMCELL_VERSION}
+#$BOSH_CLI -e bosh-env -d ${deployment_name} export-release ${unbound_release}/${unbound_release_version} ubuntu-trusty/${STEMCELL_VERSION}
 
+touch cf-235028-ibm-v235.28-ubuntu-trusty-3363.12.3-20170516-031852-389925847.tgz
 mkdir -p compiled-release/cf
 cp *.tgz compiled-release/cf/
-for package_name in `ls | grep tgz`
+for package_name in `ls compiled-release/cf | grep tgz`
 do
-  shasum1 compiled-release/cf/${package_name}
+  echo "SHA1 for " ${package_name}
+  sha1sum compiled-release/cf/${package_name}
 done
