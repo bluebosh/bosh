@@ -260,8 +260,9 @@ HERE
   } do
     describe file('/var/vcap/bosh/agent.json') do
       it { should be_valid_json_file }
-      it { should contain('"Type": "File"') }
-      it { should contain('"SettingsPath": "/var/vcap/bosh/user_data.json"') }
+      it { should contain('"Type": "HTTP"') }
+      it { should contain('"UserDataPath": "/rest/v3.1/SoftLayer_Resource_Metadata/getUserMetadata.json"') }
+      it { should contain('"InstanceIDPath": "/rest/v3.1/SoftLayer_Resource_Metadata/getId.json"') }
       it { should contain('"UseRegistry": true') }
     end
   end
