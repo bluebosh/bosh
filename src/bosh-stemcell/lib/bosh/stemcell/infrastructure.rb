@@ -135,7 +135,7 @@ module Bosh::Stemcell
 
     class Softlayer < Base
       def initialize
-        super(name: 'softlayer', hypervisor: 'esxi', default_disk_size: 3072, disk_formats: ['ovf'])
+        super(name: 'softlayer', hypervisor: 'esxi', default_disk_size: 25600, disk_formats: ['ovf'])
       end
 
       def additional_cloud_properties
