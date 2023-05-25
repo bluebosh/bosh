@@ -1,0 +1,24 @@
+<%=
+
+postgres_config = {
+  "name" => "postgres",
+  "executable" => "/var/vcap/jobs/postgres/bin/postgres",
+  "shutdown_signal" => "INT",
+  "additional_volumes" => [
+    {
+      "path" => "/var/vcap/store/postgres-13",
+      "writable" => true,
+    },
+  ],
+  "limits" => {
+    "open_files" => 65536,
+  },
+}
+
+config = {
+  "processes" => [postgres_config],
+}
+
+YAML.dump(config)
+
+%>

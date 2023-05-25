@@ -1,0 +1,51 @@
+---
+name: nats
+
+templates:
+  pre-start: bin/pre-start
+  bpm.yml: config/bpm.yml
+  nats.cfg.erb: config/nats.cfg
+  nats_client_ca.pem.erb: config/nats_client_ca.pem
+  nats_server_certificate.pem.erb: config/nats_server_certificate.pem
+  nats_server_private_key.erb: config/nats_server_private_key
+
+packages:
+  - gonats
+
+properties:
+  nats.listen_address:
+    description: IP address nats mbus listens on
+    default: 0.0.0.0 # "::" listen all interfaces (IPv6)?
+  nats.port:
+    description: TCP port nats mbus listens on
+    default: 4222
+  nats.enable_metrics_endpoint:
+    description: Expose basic nats metrics on localhost:8222 endpoint.
+    default: false
+  nats.ping_interval:
+    description: Time interval (in seconds) pings from server
+    default: 5
+  nats.ping_max_outstanding:
+    description: Maximum number of pings before declaring a client unresponsive
+    default: 2
+  nats.max_payload_mb:
+    description: Maximum message size in megabytes
+    default: 1
+  nats.user:
+    description: Username clients must use to access nats mbus
+  nats.password:
+    description: Password clients must use to access nats mbus
+  nats.auth_timeout:
+    description: Timeout (in seconds) for clients to send auth credentials
+    default: 30
+  nats.tls.ca:
+    description: CA cert used by NATS server to verify clients certificates (For Mutual TLS Connections)
+  nats.tls.server.certificate:
+    description: |
+      Certificate used by the NATS server to serve TLS connections. The Common-Name for the certificate
+      should be "default.nats.bosh-internal"
+  nats.tls.server.private_key:
+    description: Private Key used by the NATS server to serve TLS connections
+  nats.tls.timeout:
+    description: Timeout (in seconds) for TLS handshake
+    default: 30

@@ -1,0 +1,331 @@
+jobs:
+  - name: build-main-postgres-9.4
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+      - put: main-postgres-9.4
+        params:
+          build: "bosh-src/ci/old-docker/main-postgres"
+          build_args:
+            DB_VERSION: "9.4"
+        get_params:
+          skip_download: true
+
+  - name: build-main-postgres-10
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+      - put: main-postgres-10
+        params:
+          build: "bosh-src/ci/old-docker/main-postgres"
+          build_args:
+            DB_VERSION: "10"
+        get_params:
+          skip_download: true
+
+  - name: build-main-mysql-5.7
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+      - put: main-mysql-5.7
+        params:
+          build: "bosh-src/ci/old-docker/main-mysql"
+          build_args:
+            DB_VERSION: "-5.7"
+        get_params:
+          skip_download: true
+
+  - name: build-main
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+        passed:
+          - "build-main-ruby-go"
+      - put: main-image
+        params:
+          build: "bosh-src/ci/old-docker/main"
+        get_params:
+          skip_download: true
+
+  - name: build-os-image-stemcell-publisher
+    public: true
+    serial: true
+    plan:
+      - get: bosh-linux-stemcell-builder
+        trigger: true
+      - put: os-image-stemcell-publisher
+        params:
+          build: "bosh-linux-stemcell-builder/ci/docker/os-image-stemcell-publisher"
+        get_params:
+          skip_download: true
+
+  - name: build-os-image-stemcell-builder
+    public: true
+    serial: true
+    plan:
+      - get: bosh-linux-stemcell-builder-in
+        trigger: true
+        resource: bosh-linux-stemcell-builder
+      - get: bosh-os-image-builder-vmware-ovftool
+      - task: copy-ovf
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: bosh/main-ruby-go
+          run:
+            path: /bin/bash
+            args:
+            - -cex
+            - |
+              git clone bosh-linux-stemcell-builder-in bosh-linux-stemcell-builder
+              cp bosh-os-image-builder-vmware-ovftool/VMware-ovftool-4.1.0-2459827-lin.x86_64.bundle bosh-linux-stemcell-builder/ci/docker/os-image-stemcell-builder/
+          inputs:
+          - name: bosh-os-image-builder-vmware-ovftool
+          - name: bosh-linux-stemcell-builder-in
+          outputs:
+          - name: bosh-linux-stemcell-builder
+      - put: os-image-stemcell-builder
+        params:
+          build: "bosh-linux-stemcell-builder/ci/docker/os-image-stemcell-builder"
+        get_params:
+          skip_download: true
+
+  - name: build-bosh-docker
+    public: true
+    serial: true
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          trigger: true
+        - get: bosh-cli
+          trigger: true
+        - get: bosh-deployment
+          trigger: true
+      - task: copy-dependencies
+        file: bosh-src/ci/tasks/prepare-container-bosh-docker-build-context.yml
+        params:
+          container_engine: docker
+      - put: main-bosh-docker
+        params:
+          build: docker-build-context
+        get_params:
+          skip_download: true
+
+  - name: build-bosh-garden
+    public: true
+    serial: true
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          trigger: true
+        - get: bosh-cli
+          trigger: true
+        - get: bosh-deployment
+          trigger: true
+      - task: copy-dependencies
+        file: bosh-src/ci/tasks/prepare-container-bosh-docker-build-context.yml
+        params:
+          container_engine: garden
+      - put: main-bosh-garden
+        params:
+          build: docker-build-context
+        get_params:
+          skip_download: true
+
+  - name: build-main-ubuntu-chroot
+    public: true
+    serial: true
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          trigger: true
+          passed:
+            - "build-main-ruby-go"
+      - put: main-ubuntu-chroot
+        params:
+          build: "bosh-src/ci/old-docker/main-ubuntu-chroot"
+        get_params:
+          skip_download: true
+
+  - name: build-main-ruby-go
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+      - put: main-ruby-go-image
+        params:
+          build: "bosh-src/ci/old-docker/main-ruby-go"
+        get_params:
+          skip_download: true
+
+  - name: build-main-bats-aws
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+        passed:
+          - "build-main-ruby-go"
+      - put: main-bats-aws
+        params:
+          build: "bosh-src/ci/old-docker/main-bats-aws"
+        get_params:
+          skip_download: true
+
+  - name: build-bosh-blobstore-client
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+        trigger: true
+      - put: bosh-blobstore-client
+        params:
+          build: "bosh-src/ci/old-docker/bosh-blobstore-client"
+        get_params:
+          skip_download: true
+
+resources:
+  - name: bosh-src
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh.git
+      paths:
+        - "ci/old-docker"
+        - "ci/pipelines/docker-images/tasks"
+
+  - name: bosh-linux-stemcell-builder
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh-linux-stemcell-builder
+      branch: master
+      paths:
+        - "ci/docker"
+
+  - name: bosh-deployment
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh-deployment
+      branch: master
+
+  - name: bosh-cli
+    type: s3
+    source:
+      regexp: alpha-bosh-cli-(.*)-linux-amd64
+      bucket: ((bosh_cli_aws_s3_alpha_release_bucket))
+      region_name: ((bosh_cli_aws_s3_release_bucket_region))
+
+  - name: main-postgres-9.4
+    type: docker-image
+    source:
+      repository: bosh/main-postgres-9.4
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-postgres-10
+    type: docker-image
+    source:
+      repository: bosh/main-postgres-10
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-mysql-5.7
+    type: docker-image
+    source:
+      repository: bosh/main-mysql-5.7
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-image
+    type: docker-image
+    source:
+      repository: bosh/main
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: os-image-stemcell-publisher
+    type: docker-image
+    source:
+      repository: bosh/os-image-stemcell-publisher
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: os-image-stemcell-builder
+    type: docker-image
+    source:
+      repository: bosh/os-image-stemcell-builder
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: bosh-os-image-builder-vmware-ovftool
+    type: s3
+    source:
+      access_key_id: ((os_images_vmware_ovftool_access_key_id))
+      bucket: ((aws_s3_bucket_name_os_images_vmware_ovftool))
+      region_name: ((aws_s3_region_os_images_vmware_ovftool))
+      secret_access_key: ((os_images_vmware_ovftool_secret_access_key))
+      versioned_file: VMware-ovftool-4.1.0-2459827-lin.x86_64.bundle
+
+  - name: main-ubuntu-chroot
+    type: docker-image
+    source:
+      repository: bosh/main-ubuntu-chroot
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-bosh-docker
+    type: docker-image
+    source:
+      repository: bosh/main-bosh-docker
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-bosh-garden
+    type: docker-image
+    source:
+      repository: bosh/main-bosh-garden
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-bats-aws
+    type: docker-image
+    source:
+      repository: bosh/main-bats-aws
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-ruby-go-image
+    type: docker-image
+    source:
+      repository: bosh/main-ruby-go
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: bosh-blobstore-client
+    type: docker-image
+    source:
+      repository: bosh/blobstore_client
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))

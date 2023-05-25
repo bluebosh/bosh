@@ -1,0 +1,34 @@
+set -e
+
+mkdir -p ${BOSH_INSTALL_TARGET}/{bin,gem_home}
+
+source /var/vcap/packages/ruby-3.1.0-r0.81.0/bosh/compile.env
+
+cat > Gemfile <<EOF
+# Explicitly require vendored version to avoid requiring builtin json gem
+gem 'json', '2.3.0'
+gem 'bosh-monitor'
+EOF
+
+pushd bosh-monitor/ > /dev/null
+  gem build bosh-monitor
+  mv *.gem ../vendor/cache
+popd > /dev/null
+
+pushd vendor/cache/eventmachine-* > /dev/null
+  gem build eventmachine.gemspec
+  mv *.gem ../
+popd > /dev/null
+
+if [ "`uname -m`" == "ppc64le" ]; then
+    bundle config build.nokogiri '--use-system-libraries'
+fi
+
+bundle install \
+  --local \
+  --no-prune \
+  --binstubs ${BOSH_INSTALL_TARGET}/bin \
+  --path ${BOSH_INSTALL_TARGET}/gem_home
+
+cp Gemfile ${BOSH_INSTALL_TARGET}
+cp Gemfile.lock ${BOSH_INSTALL_TARGET}

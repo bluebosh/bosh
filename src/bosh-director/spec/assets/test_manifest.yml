@@ -1,0 +1,26 @@
+---
+name: my-test-deployment
+
+stemcells:
+- name: ubuntu
+  version: latest
+
+releases:
+- name: redis
+  version: 12
+
+instance_groups:
+- name: redis-master
+  instances: 1
+  jobs:
+  - name: redis-server
+    release: redis
+    properties:
+      redis:
+        max_connections: 10
+  persistent_disk: 10_240
+  vm_type: default
+  stemcell: ubuntu
+  networks:
+  - name: default
+

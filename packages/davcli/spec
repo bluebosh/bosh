@@ -1,0 +1,4 @@
+---
+name: davcli
+files:
+- davcli/davcli-*-linux-amd64

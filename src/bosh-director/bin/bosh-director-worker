@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+
+require 'erb'
+require 'optparse'
+require 'bosh/director/worker'
+require 'bosh/director/config'
+
+config_file = nil
+index = nil
+
+begin
+  opts = OptionParser.new do |op|
+    op.on('-c', '--config [ARG]', 'Configuration File') do |opt|
+      config_file = opt
+    end
+
+    op.on('-i', '--index [ARG]', Integer, 'Worker Index') do |opt|
+      index = opt
+    end
+  end
+
+  opts.parse!(ARGV.dup)
+
+  config_file ||= ::File.expand_path('../../config/bosh-director.yml', __FILE__)
+  config = nil
+
+  Bosh::Director::Config.audit_filename = "audit_worker_#{index}.log"
+
+  config = Bosh::Director::Config.load_file(config_file)
+  config.db
+
+  worker = Bosh::Director::Worker.new(config, index)
+  worker.prep
+  worker.start
+end

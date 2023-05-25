@@ -1,0 +1,12 @@
+---
+name: bazquux
+templates:
+  bazquux_ctl: bin/bazquux_ctl
+  pre_stop.erb: bin/pre-stop
+
+packages: []
+
+properties:
+  fail_on_pre_stop:
+    description: If set, the job will fail on pre-stop
+    default: false

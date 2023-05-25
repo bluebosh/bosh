@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -e
+
+# assumes targeting director already
+# and variables have been exported
+
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# TODO(db, ja): validate required variables have been set
+# STEMCELL_OS
+# STEMCELL_VERSION
+# BOSH_DEPLOYMENT_PATH
+# BOSH_DIRECTOR_RELEASE_PATH
+# BOSH_BINARY_PATH
+
+
+cd "${script_dir}/../src/go" || exit 1
+export GOPATH=$(pwd)
+export PATH="${GOPATH}/bin":$PATH
+
+cd src/github.com/cloudfoundry/bosh-release-acceptance-tests || exit 1
+
+if [[ -n "${FOCUS_SPEC+x}" ]];then
+  go run github.com/onsi/ginkgo/ginkgo -r -v -race -randomizeSuites -randomizeAllSpecs -focus="${FOCUS_SPEC}" -nodes 5 brats
+else
+  go run github.com/onsi/ginkgo/ginkgo -r -v -race -randomizeSuites -randomizeAllSpecs
+fi

@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+
+require 'bosh/director'
+
+config_file = '/var/vcap/jobs/director/config/director.yml'
+
+config = Bosh::Director::Config.load_file(config_file)
+Bosh::Director::App.new(config)
+logger = Logger.new(STDOUT)
+Bosh::Director::Config.logger = logger
+blobstore = Bosh::Director::App.instance.blobstores.blobstore
+
+publisher = Bosh::Director::BlobstoreDnsPublisher.new(
+  lambda { blobstore },
+  Bosh::Director::Config.root_domain,
+  Bosh::Director::AgentBroadcaster.new,
+  logger
+)
+
+EventMachine.run do
+  Thread.new {
+    Bosh::Director::Models::LocalDnsRecord.create(:ip => "#{SecureRandom.uuid}-tombstone")
+    publisher.publish_and_broadcast
+    EM.stop
+  }
+end

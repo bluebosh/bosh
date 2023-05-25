@@ -1,0 +1,26 @@
+variables:
+- name: default_ca
+  type: certificate
+  options:
+    duration: 1000
+    is_ca: true
+- name: database_server
+  type: certificate
+  options:
+    duration: 1000
+    ca: default_ca
+    common_name: 127.0.0.1
+    alternative_names:
+    - 127.0.0.1
+    extended_key_usage:
+      - server_auth
+- name: database_client
+  type: certificate
+  options:
+    duration: 1000
+    ca: default_ca
+    common_name: 127.0.0.1
+    alternative_names:
+    - 127.0.0.1
+    extended_key_usage:
+      - client_auth

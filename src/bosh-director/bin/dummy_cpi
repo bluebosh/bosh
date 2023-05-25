@@ -1,0 +1,81 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require 'yaml'
+require 'cloud'
+
+require_relative '../lib/cloud/dummy'
+require_relative '../lib/cloud/dummy_v2'
+
+module Logging
+  def self.appenders
+    self
+  end
+
+  def self.io(_, io)
+    Logger.new(io)
+  end
+
+  class Logger
+    attr_reader :io
+
+    def initialize(io)
+      @io = io
+      @appenders = self
+    end
+
+    def add_appenders(logger)
+      @io = logger.io
+    end
+
+    def debug(message)
+      io << "DEBUG - #{message}\n"
+    end
+
+    def info(message)
+      io << "INFO - #{message}\n"
+    end
+
+    def warn(message)
+      io << "WARN - #{message}\n"
+    end
+
+    def error(message)
+      io << "ERROR - #{message}\n"
+    end
+  end
+end
+
+result = nil
+error = nil
+
+begin
+  cpi_config = JSON.parse(File.read(ARGV.shift))
+  log_buffer = StringIO.new
+  cpi_config['log_buffer'] = log_buffer
+
+  request = JSON.parse($stdin.readline)
+
+  command = request['method']
+  arguments = request['arguments']
+  context = request['context']
+  requested_api_version = request['api_version']
+
+  dummy = case requested_api_version
+          when 2
+            Bosh::Clouds::DummyV2.new(cpi_config, context)
+          else
+            Bosh::Clouds::Dummy.new(cpi_config, context, cpi_config['api_version'])
+          end
+
+  result = dummy.send(command, *arguments)
+rescue StandardError => e
+  error = {
+    'type' => e.message,
+    'message' => "#{e.message}\n#{e.backtrace.join("\n")}",
+    'ok_to_retry' => false,
+  }
+end
+
+response = { 'result' => result, 'error' => error, 'log' => log_buffer.string }
+print response.to_json

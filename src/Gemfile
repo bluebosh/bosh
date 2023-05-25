@@ -1,0 +1,78 @@
+source 'https://rubygems.org'
+
+ruby '3.1.0'
+
+gem 'bosh-core', path: 'bosh-core'
+gem 'bosh-director', path: 'bosh-director'
+gem 'bosh-director-core', path: 'bosh-director-core'
+gem 'bosh-monitor', path: 'bosh-monitor'
+gem 'bosh-registry', path: 'bosh-registry'
+gem 'bosh-template', path: 'bosh-template'
+gem 'bosh_common', path: 'bosh_common'
+
+gem 'rake', '~>13.0.3'
+
+# json version is hardcoded in release director, health_monitor and registry packages
+# when modified needs to be updated there as well
+gem 'json', '=2.3.0'
+
+gem 'talentbox-delayed_job_sequel', '~>4.3'
+
+gem 'ruby-prof', '0.17.0'
+
+group :production do
+  # this was pulled from bosh_aws_registry's Gemfile.  Why does it exist?
+  # also bosh_openstack_registry, director
+  gem 'mysql2'
+  gem 'pg'
+end
+
+group :bat do
+  gem 'httpclient'
+  gem 'minitar'
+  gem 'net-ssh'
+end
+
+group :development, :test do
+  gem 'bosh-dev', path: 'bosh-dev'
+  gem 'bosh_cpi'
+
+  gem 'bundle-audit'
+
+  gem 'rspec', '~> 3.4'
+  gem 'rspec-instafail'
+  gem 'rspec-its'
+
+  gem 'fakefs'
+  gem 'parallel_tests', '~> 2.0'
+  gem 'rack-test', '>= 0.6.3'
+  gem 'sinatra', '>= 2.0.2'
+  gem 'sinatra-contrib', '>= 2.0.2'
+  gem 'webmock'
+
+  gem 'pry-byebug'
+  gem 'pry-remote'
+
+  gem 'rubocop'
+  gem 'rubocop-git'
+
+  gem 'eventmachine', '~>1.3.0.dev.1', git: 'https://github.com/eventmachine/eventmachine', ref: 'abe34'
+
+  # for director
+  gem 'machinist', '~>1.0'
+  gem 'factory_bot', '~> 6.2'
+
+  # for root level specs
+  gem 'nats-pure', '~>0.6.2'
+  gem 'openssl'
+  gem 'rest-client'
+
+  gem 'blue-shell'
+  gem 'sqlite3'
+  gem 'timecop', '~>0.9.4'
+
+  gem 'unix-crypt'
+
+  # for registry
+  gem 'mono_logger'
+end

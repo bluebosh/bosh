@@ -1,0 +1,6 @@
+---
+final_name: bosh
+blobstore:
+  provider: gcs
+  options:
+    bucket_name: bosh-release-blobs

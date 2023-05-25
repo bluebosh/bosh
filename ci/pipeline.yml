@@ -1,0 +1,1177 @@
+---
+groups:
+  - name: bosh
+    jobs:
+      - gate
+      - bump-packages
+      - unit
+      - unit-mysql
+      - unit-postgres
+      - run-bundle-audit
+      - integration-db-tls-postgres
+      - integration-db-tls-postgres-hotswap
+      - integration-db-tls-mysql
+      - candidate-release
+      - compile-bosh-dev-release-bionic
+      - bats-ubuntu-bionic
+      - brats-ubuntu-bionic
+      - bats-ubuntu-xenial
+      - bosh-disaster-recovery-acceptance-tests
+      - upgrade
+      - upload-compiled-staging-tarball
+      - delivery
+
+  - name: cut-release
+    jobs:
+      - bump-major
+      - bump-minor
+      - bump-patch
+      - finalize-release
+      - export-final-release
+
+  - name: docker
+    jobs:
+    - build-main-ruby-go
+    - build-main-postgres-9-4
+    - build-main-postgres-10
+    - build-main-mysql-5-7
+    - build-integration
+    - build-docker-cpi
+
+jobs:
+  - name: gate
+    serial_groups:
+      - integration-db-tls-mysql
+      - integration-db-tls-postgres
+      - integration-db-tls-postgres-hotswap
+      - unit
+      - unit-mysql
+      - unit-postgres
+      - run-bundle-audit
+    plan:
+    - get: bosh-src
+      trigger: true
+
+  - name: unit
+    public: true
+    serial: true
+    serial_groups: [unit]
+    build_logs_to_retain: 250
+    plan:
+      - get: bosh-src
+        trigger: true
+        passed: [gate]
+      - get: main-ruby-go-image
+      - task: test
+        timeout: 2h
+        file: bosh-src/ci/tasks/test-unit.yml
+        image: main-ruby-go-image
+        params:
+          DB: sqlite
+
+  - name: unit-mysql
+    public: true
+    serial: true
+    serial_groups: [unit-mysql]
+    build_logs_to_retain: 250
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          passed: [gate]
+          trigger: true
+        - get: main-mysql-5-7-image
+      - task: test-mysql-5.7
+        timeout: 2h
+        privileged: true
+        file: bosh-src/ci/tasks/test-unit.yml
+        image: main-mysql-5-7-image
+        params:
+          DB: mysql
+
+  - name: unit-postgres
+    public: true
+    serial_groups: [unit-postgres]
+    serial: true
+    build_logs_to_retain: 250
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          passed: [gate]
+          trigger: true
+        - get: main-postgres-9-4-image
+        - get: main-postgres-10-image
+      - in_parallel:
+        - task: test-postgres-9.4
+          timeout: 2h
+          privileged: true
+          file: bosh-src/ci/tasks/test-unit.yml
+          image: main-postgres-9-4-image
+          params:
+            DB: postgresql
+            DB_VERSION: 9.4
+        - task: test-postgres-10
+          timeout: 2h
+          privileged: true
+          file: bosh-src/ci/tasks/test-unit.yml
+          image: main-postgres-10-image
+          params:
+            DB: postgresql
+            DB_VERSION: 10
+
+  - name: run-bundle-audit
+    public: true
+    serial: true
+    serial_groups: [run-bundle-audit]
+    build_logs_to_retain: 250
+    plan:
+      - get: bosh-src
+        trigger: true
+        passed: [gate]
+      - task: test-bundle-audit
+        config:
+          inputs:
+            - name: bosh-src
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              tag: ((branch_name))
+              repository: bosh/main-ruby-go
+          run:
+            path: /bin/sh
+            args:
+              - -exc
+              - |
+                set -eux;
+                cd bosh-src/src;
+                gem install bundler:"$(grep -A 1 'BUNDLED WITH' Gemfile.lock | tail -n 1 | awk '{$1=$1};1')";
+                bundle install;
+                bundler-audit update;
+                bundler-audit check --ignore 'CVE-2019-17383';
+
+  - name: integration-db-tls-postgres
+    public: true
+    serial: true
+    serial_groups: [integration-db-tls-postgres]
+    build_logs_to_retain: 250
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          trigger: true
+          passed: [gate]
+        - get: bosh-cli
+          trigger: true
+        - get: bosh-agent
+        - get: integration-tests-parallel-runtime
+        - get: main-postgres-10-image
+      - task: tests
+        privileged: true
+        file: bosh-src/ci/tasks/test-integration.yml
+        image: main-postgres-10-image
+        params:
+          DB:           postgresql
+          DB_TLS:       true
+      - put: integration-tests-parallel-runtime
+        params:
+          file: parallel-runtime-log/parallel_runtime_rspec.log
+          acl: public-read
+
+  - name: integration-db-tls-postgres-hotswap
+    public: true
+    serial: true
+    serial_groups: [integration-db-tls-postgres-hotswap]
+    build_logs_to_retain: 250
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          trigger: true
+          passed: [gate]
+        - get: bosh-cli
+          trigger: true
+        - get: bosh-agent
+        - get: integration-tests-parallel-runtime
+        - get: main-postgres-10-image
+      - task: tests
+        privileged: true
+        file: bosh-src/ci/tasks/test-integration.yml
+        image: main-postgres-10-image
+        params:
+          DB:           postgresql
+          DEFAULT_UPDATE_VM_STRATEGY: create-swap-delete
+          DB_TLS:       true
+
+      - put: integration-tests-parallel-runtime
+        params:
+          file: parallel-runtime-log/parallel_runtime_rspec.log
+          acl: public-read
+
+  - name: integration-db-tls-mysql
+    public: true
+    serial: true
+    serial_groups: [integration-db-tls-mysql]
+    build_logs_to_retain: 250
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          passed: [gate]
+          trigger: true
+        - get: bosh-cli
+          trigger: true
+        - get: bosh-agent
+        - get: integration-tests-parallel-runtime
+        - get: main-mysql-5-7-image
+      - task: tests
+        privileged: true
+        file: bosh-src/ci/tasks/test-integration.yml
+        image: main-mysql-5-7-image
+        params:
+          DB:           mysql
+          DB_TLS:       true
+      - put: integration-tests-parallel-runtime
+        params:
+          file: parallel-runtime-log/parallel_runtime_rspec.log
+          acl: public-read
+
+  - name: candidate-release
+    plan:
+    - get: bosh-src
+      trigger: true
+      passed:
+      - unit
+      - unit-mysql
+      - unit-postgres
+      - integration-db-tls-mysql
+      - integration-db-tls-postgres
+      - integration-db-tls-postgres-hotswap
+      - run-bundle-audit
+    - get: bosh-cli
+    - get: main-ruby-go-image
+    - put: version
+      params:
+        pre: rc
+    - task: make
+      file: bosh-src/ci/tasks/make-candidate.yml
+      image: main-ruby-go-image
+    - put: bosh-candidate-release-tarballs
+      params:
+        file: "release/bosh-dev-release.tgz"
+
+  - name: compile-bosh-dev-release-bionic
+    plan:
+    - in_parallel:
+      - get: bosh-src
+        passed: [candidate-release]
+      - get: release
+        resource: bosh-candidate-release-tarballs
+        passed: [candidate-release]
+        trigger: true
+      - get: stemcell
+        resource: warden-ubuntu-bionic
+        trigger: true
+      - get: docker-cpi-image
+    - task: export-release
+      image: docker-cpi-image
+      file: bosh-src/ci/tasks/export-release.yml
+      privileged: true
+    - put: bosh-compiled-candidate-bionic
+      params:
+        file: "compiled-release/*.tgz"
+
+  - name: bats-ubuntu-bionic
+    serial: true
+    plan:
+    - do:
+      - in_parallel:
+        - get: bosh-candidate-release-tarballs
+          passed: [compile-bosh-dev-release-bionic]
+        - get: bosh-release
+          resource: bosh-compiled-candidate-bionic
+          trigger: true
+          passed: [compile-bosh-dev-release-bionic]
+        - get: cpi-release
+        - get: stemcell
+          resource: vsphere-esxi-ubuntu-bionic
+        - get: bosh-cli
+        - get: bats
+        - get: bosh-deployment
+        - get: bosh-src
+          passed: [compile-bosh-dev-release-bionic]
+        - get: main-ruby-go-image
+      - put: environment
+        resource: nimbus-environment
+        params:
+          acquire: true
+      - do:
+        - task: deploy-director
+          tags: [nimbus]
+          file: bosh-src/ci/bats/tasks/deploy-director.yml
+          image: main-ruby-go-image
+          params:
+            BAT_INFRASTRUCTURE: vsphere
+            BOSH_CLIENT: ((stemcell-test-director-username))
+            BOSH_CLIENT_SECRET: ((stemcell-test-director-password))
+            BOSH_VAR_vcenter_ip: "((nimbus_concourse-testbed-bosh-main_ip))"
+            BOSH_VAR_vcenter_user: "((nimbus_concourse-testbed-bosh-main_user.username))"
+            BOSH_VAR_vcenter_password: "((nimbus_concourse-testbed-bosh-main_user.password))"
+            BOSH_VAR_vcenter_cluster: "((nimbus_concourse-testbed-bosh-main_cluster))"
+            BOSH_VAR_vcenter_dc: "((nimbus_concourse-testbed-bosh-main_dc))"
+            BOSH_VAR_vcenter_ds: "((nimbus_concourse-testbed-bosh-main_ds))"
+            BOSH_VAR_vcenter_rp: "((nimbus_concourse-testbed-bosh-main_rp))"
+            DEPLOY_ARGS: |
+              -o bosh-deployment/vsphere/resource-pool.yml
+              --vars-env=BOSH_VAR
+        - task: prepare-bats
+          tags: [nimbus]
+          file: bosh-src/ci/bats/iaas/vsphere/prepare-bats-config.yml
+          image: main-ruby-go-image
+          params:
+            STEMCELL_NAME: bosh-vsphere-esxi-ubuntu-bionic-go_agent
+        - task: run-bats
+          tags: [nimbus]
+          file: bats/ci/tasks/run-bats.yml
+          image: main-ruby-go-image
+      ensure:
+        do:
+        - task: teardown
+          tags: [nimbus]
+          file: bosh-src/ci/bats/tasks/destroy-director.yml
+          image: main-ruby-go-image
+          attempts: 3
+        - put: environment
+          resource: nimbus-environment
+          params:
+           release: environment
+          attempts: 3
+
+  - name: brats-ubuntu-bionic
+    serial: true
+    plan:
+    - in_parallel:
+      - get: bosh-src
+        passed: [compile-bosh-dev-release-bionic]
+      - get: bosh-dns-release
+      - get: stemcell
+        resource: warden-ubuntu-bionic
+      - get: bosh-candidate-release-tarballs
+        passed: [compile-bosh-dev-release-bionic]
+      - get: bosh-release
+        resource: bosh-compiled-candidate-bionic
+        trigger: true
+        passed: [compile-bosh-dev-release-bionic]
+      - get: bosh-deployment
+      - get: docker-cpi-image
+    - do:
+      - put: brats-terraform
+        attempts: 2
+        params:
+          env_name: brats-ubuntu-bionic-((branch_name))
+          terraform_source: bosh-src/ci/brats
+          vars:
+            rds_mysql_username: ((brats-rds-mysql-external-db-user))
+            rds_mysql_password: ((brats-rds-mysql-external-db-password))
+            rds_mysql_databasename: ((brats-rds-mysql-external-db-name))
+            rds_postgres_username: ((brats-rds-postgres-external-db-user))
+            rds_postgres_password: ((brats-rds-postgres-external-db-password))
+            rds_postgres_databasename: ((brats-rds-postgres-external-db-name))
+            aws_access_key_id: ((bosh-ci-database-terraform-rds-aws-access-key-id))
+            aws_secret_access_key: ((bosh-ci-database-terraform-rds-aws-secret-access-key))
+            gcp_mysql_databasename: ((brats-gcp-mysql-external-db-name))
+            gcp_postgres_databasename: ((brats-gcp-postgres-external-db-name))
+            gcp_private_network_name: brats-ubuntu-bionic-((branch_name))
+            concourse_authorized_network: ((concourse_egress_ip))
+          env:
+            GOOGLE_CREDENTIALS: ((bosh-ci-database-terraform-google-credentials))
+      - task: create-brats-sql-users
+        file: bosh-src/ci/tasks/create-brats-sql-users.yml
+        params:
+          GOOGLE_CREDENTIALS: ((bosh-ci-database-terraform-google-credentials))
+          GCP_POSTGRES_USERNAME: ((brats-gcp-postgres-external-db-user))
+          GCP_POSTGRES_PASSWORD: ((brats-gcp-postgres-external-db-password))
+          GCP_MYSQL_USERNAME: ((brats-gcp-mysql-external-db-user))
+          GCP_MYSQL_PASSWORD: ((brats-gcp-mysql-external-db-password))
+        input_mapping:
+          terraform-output: brats-terraform
+      - task: create-ssl-certificates
+        attempts: 2
+        file: bosh-src/ci/tasks/create-brats-ssl-certificates.yml
+        params:
+          GOOGLE_CREDENTIALS: ((bosh-ci-database-terraform-google-credentials))
+        input_mapping:
+          terraform-output: brats-terraform
+      - task: test-brats
+        image: docker-cpi-image
+        file: bosh-src/ci/tasks/test-brats.yml
+        input_mapping:
+          database-metadata: brats-terraform
+        privileged: true
+        params: &brats-dbs-params
+          RDS_MYSQL_EXTERNAL_DB_USER: ((brats-rds-mysql-external-db-user))
+          RDS_MYSQL_EXTERNAL_DB_PASSWORD: ((brats-rds-mysql-external-db-password))
+          RDS_MYSQL_EXTERNAL_DB_NAME: ((brats-rds-mysql-external-db-name))
+          RDS_POSTGRES_EXTERNAL_DB_USER: ((brats-rds-postgres-external-db-user))
+          RDS_POSTGRES_EXTERNAL_DB_PASSWORD: ((brats-rds-postgres-external-db-password))
+          RDS_POSTGRES_EXTERNAL_DB_NAME: ((brats-rds-postgres-external-db-name))
+          GCP_MYSQL_EXTERNAL_DB_USER: ((brats-gcp-mysql-external-db-user))
+          GCP_MYSQL_EXTERNAL_DB_PASSWORD: ((brats-gcp-mysql-external-db-password))
+          GCP_MYSQL_EXTERNAL_DB_NAME: ((brats-gcp-mysql-external-db-name))
+          GCP_POSTGRES_EXTERNAL_DB_USER: ((brats-gcp-postgres-external-db-user))
+          GCP_POSTGRES_EXTERNAL_DB_PASSWORD: ((brats-gcp-postgres-external-db-password))
+          GCP_POSTGRES_EXTERNAL_DB_NAME: ((brats-gcp-postgres-external-db-name))
+          GCP_PRIVATE_NETWORK_NAME: brats-ubuntu-bionic-((branch_name))
+          STEMCELL_OS: ubuntu-bionic
+      ensure:
+        do:
+        - task: cleanup-external-dbs
+          file: bosh-src/ci/tasks/test-brats-db-cleanup.yml
+          input_mapping:
+            database-metadata: brats-terraform
+          params: *brats-dbs-params
+        - task: destroy-brats-sql-users
+          file: bosh-src/ci/tasks/destroy-brats-sql-users.yml
+          params:
+            GOOGLE_CREDENTIALS: ((bosh-ci-database-terraform-google-credentials))
+            GCP_POSTGRES_USERNAME: ((brats-gcp-postgres-external-db-user))
+            GCP_POSTGRES_PASSWORD: ((brats-gcp-postgres-external-db-password))
+            GCP_MYSQL_USERNAME: ((brats-gcp-mysql-external-db-user))
+            GCP_MYSQL_PASSWORD: ((brats-gcp-mysql-external-db-password))
+          input_mapping:
+            terraform-output: brats-terraform
+        - put: brats-terraform
+          attempts: 3
+          get_params: { action: destroy }
+          params:
+            env_name: brats-ubuntu-bionic-((branch_name))
+            terraform_source: bosh-src/ci/brats
+            vars:
+              rds_mysql_username: ((brats-rds-mysql-external-db-user))
+              rds_mysql_password: ((brats-rds-mysql-external-db-password))
+              rds_mysql_databasename: ((brats-rds-mysql-external-db-name))
+              rds_postgres_username: ((brats-rds-postgres-external-db-user))
+              rds_postgres_password: ((brats-rds-postgres-external-db-password))
+              rds_postgres_databasename: ((brats-rds-postgres-external-db-name))
+              aws_access_key_id: ((bosh-ci-database-terraform-rds-aws-access-key-id))
+              aws_secret_access_key: ((bosh-ci-database-terraform-rds-aws-secret-access-key))
+              gcp_mysql_databasename: ((brats-gcp-mysql-external-db-name))
+              gcp_postgres_databasename: ((brats-gcp-postgres-external-db-name))
+              gcp_private_network_name: brats-ubuntu-bionic-((branch_name))
+              concourse_authorized_network: ((concourse_egress_ip))
+            env:
+              GOOGLE_CREDENTIALS: ((bosh-ci-database-terraform-google-credentials))
+            action: destroy
+
+  #The VMware Bosh Ecosystem team has a need to cross-check the behavior of
+  #BATS on both the (VMware-"proprietary") Xenial ESM stemcell, as well as
+  #the latest Open Source stemcell. If you are an Open Source user, and do
+  #not have access to the Xenial ESM stemcell, do know that you can comment
+  #out the `bats-ubuntu-xenial` job, and all resources that it references
+  #and have no loss of pipeline functionality.
+  - name: bats-ubuntu-xenial
+    serial: true
+    plan:
+    - do:
+      - in_parallel:
+        - get: bosh-candidate-release-tarballs
+          passed: [compile-bosh-dev-release-bionic]
+        - get: bosh-release
+          resource: bosh-compiled-candidate-bionic
+          trigger: true
+          passed: [compile-bosh-dev-release-bionic]
+        - get: cpi-release
+        - get: stemcell
+          resource: vsphere-esxi-ubuntu-xenial
+          params:
+             globs: ["*vsphere*"]
+        - get: bosh-cli
+        - get: bats
+        - get: bosh-deployment
+        - get: bosh-src
+          passed: [compile-bosh-dev-release-bionic]
+        - get: main-ruby-go-image
+      - put: environment
+        resource: nimbus-environment
+        params:
+          acquire: true
+      - do:
+        - task: deploy-director
+          tags: [nimbus]
+          file: bosh-src/ci/bats/tasks/deploy-director.yml
+          image: main-ruby-go-image
+          params:
+            BAT_INFRASTRUCTURE: vsphere
+            BOSH_CLIENT: ((stemcell-test-director-username))
+            BOSH_CLIENT_SECRET: ((stemcell-test-director-password))
+            BOSH_VAR_vcenter_ip: "((nimbus_concourse-testbed-bosh-main_ip))"
+            BOSH_VAR_vcenter_user: "((nimbus_concourse-testbed-bosh-main_user.username))"
+            BOSH_VAR_vcenter_password: "((nimbus_concourse-testbed-bosh-main_user.password))"
+            BOSH_VAR_vcenter_cluster: "((nimbus_concourse-testbed-bosh-main_cluster))"
+            BOSH_VAR_vcenter_dc: "((nimbus_concourse-testbed-bosh-main_dc))"
+            BOSH_VAR_vcenter_ds: "((nimbus_concourse-testbed-bosh-main_ds))"
+            BOSH_VAR_vcenter_rp: "((nimbus_concourse-testbed-bosh-main_rp))"
+            DEPLOY_ARGS: |
+              -o bosh-deployment/vsphere/resource-pool.yml
+              --vars-env=BOSH_VAR
+        - task: prepare-bats
+          tags: [nimbus]
+          file: bosh-src/ci/bats/iaas/vsphere/prepare-bats-config.yml
+          image: main-ruby-go-image
+          params:
+            STEMCELL_NAME: bosh-vsphere-esxi-ubuntu-xenial-go_agent
+        - task: run-bats
+          tags: [nimbus]
+          file: bats/ci/tasks/run-bats.yml
+          image: main-ruby-go-image
+      ensure:
+        do:
+        - task: teardown
+          tags: [nimbus]
+          file: bosh-src/ci/bats/tasks/destroy-director.yml
+          image: main-ruby-go-image
+          attempts: 3
+        - put: environment
+          resource: nimbus-environment
+          params:
+           release: environment
+          attempts: 3
+
+  - name: bosh-disaster-recovery-acceptance-tests
+    plan:
+    - in_parallel:
+      - get: bosh-src
+        passed: [compile-bosh-dev-release-bionic]
+      - get: stemcell
+        resource: warden-ubuntu-bionic
+      - get: bosh-candidate-release-tarballs
+        passed: [compile-bosh-dev-release-bionic]
+      - get: bosh-release
+        resource: bosh-compiled-candidate-bionic
+        trigger: true
+        passed: [compile-bosh-dev-release-bionic]
+      - get: bosh-disaster-recovery-acceptance-tests
+      - get: bosh-deployment
+      - get: bbr-cli-binary
+        params:
+          globs: ["bbr*-linux-amd64"]
+      - get: docker-cpi-image
+    - do:
+      - task: test-bdrats
+        image: docker-cpi-image
+        file: bosh-src/ci/tasks/test-bdrats.yml
+        privileged: true
+
+  - name: upgrade
+    serial: true
+    plan:
+    - do:
+      - in_parallel:
+        - get: bosh-src
+          passed: [compile-bosh-dev-release-bionic]
+        - get: stemcell
+          resource: aws-xen-hvm-ubuntu-bionic
+        - get: bosh-deployment
+        - get: bosh-cli
+        - get: bosh-release
+          resource: bosh-compiled-candidate-bionic
+          trigger: true
+          passed: [compile-bosh-dev-release-bionic]
+        - get: last-released-bosh-release
+        - get: zookeeper-release
+        - get: main-ruby-go-image
+      - put: terraform
+        params:
+          terraform_source: bosh-src/ci/bats/iaas/aws/terraform
+          delete_on_failure: true
+          env_name: upgrade-ubuntu-bionic-aws-((branch_name))
+    - do:
+      - task: deploy-previous-version
+        image: main-ruby-go-image
+        file: bosh-src/ci/bats/tasks/deploy-director.yml
+        input_mapping:
+          environment: terraform
+          bosh-release: last-released-bosh-release
+        params:
+          BAT_INFRASTRUCTURE: aws
+          AWS_ACCESS_KEY_ID:     ((aws_access_key__primary))
+          AWS_SECRET_ACCESS_KEY: ((aws_secret_key__primary))
+          AWS_DEFAULT_REGION:    ((aws_region__primary))
+          AWS_SSH_PRIVATE_KEY:   ((aws_ssh_private_key))
+          DEPLOY_ARGS: |
+            -o bosh-deployment/external-ip-with-registry-not-recommended.yml
+      - task: deploy-zookeeper
+        image: main-ruby-go-image
+        file: bosh-src/ci/tasks/deploy-zookeeper.yml
+      - task: upgrade-to-current-version
+        image: main-ruby-go-image
+        file: bosh-src/ci/bats/tasks/deploy-director.yml
+        input_mapping:
+          environment: terraform
+        params:
+          BAT_INFRASTRUCTURE: aws
+          AWS_ACCESS_KEY_ID:     ((aws_access_key__primary))
+          AWS_SECRET_ACCESS_KEY: ((aws_secret_key__primary))
+          AWS_DEFAULT_REGION:    ((aws_region__primary))
+          AWS_SSH_PRIVATE_KEY:   ((aws_ssh_private_key))
+          DEPLOY_ARGS: |
+            -o bosh-deployment/external-ip-with-registry-not-recommended.yml
+      - task: recreate-zookeeper
+        image: main-ruby-go-image
+        file: bosh-src/ci/tasks/deploy-zookeeper.yml
+      ensure:
+        do:
+        - task: teardown
+          image: main-ruby-go-image
+          file: bosh-src/ci/bats/tasks/destroy-director.yml
+          attempts: 3
+        ensure:
+          do:
+          - task: ensure-terminated
+            image: main-ruby-go-image
+            file: bosh-src/ci/bats/iaas/aws/ensure-terminated.yml
+            input_mapping:
+              environment: terraform
+            params:
+              AWS_ACCESS_KEY_ID:     ((aws_access_key__primary))
+              AWS_SECRET_ACCESS_KEY: ((aws_secret_key__primary))
+              AWS_DEFAULT_REGION:    ((aws_region__primary))
+          - put: terraform
+            attempts: 3
+            params:
+              terraform_source: bosh-src/ci/bats/iaas/aws/terraform
+              env_name: upgrade-ubuntu-bionic-aws-((branch_name))
+              action: destroy
+            get_params:
+              action: destroy
+
+  - name: upload-compiled-staging-tarball
+    plan:
+    - get: compiled-release
+      resource: bosh-compiled-candidate-bionic
+      trigger: true
+      passed:
+      - bats-ubuntu-bionic
+      - brats-ubuntu-bionic
+      - bosh-disaster-recovery-acceptance-tests
+    - put: bosh-compiled-staging-tarballs
+      params:
+        file: "compiled-release/*.tgz"
+
+  - name: delivery
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          trigger: true
+          passed:
+          - bats-ubuntu-bionic
+          - brats-ubuntu-bionic
+          - bosh-disaster-recovery-acceptance-tests
+      - put: tracker-output
+        params:
+          repos:
+          - bosh-src
+
+  - name: finalize-release
+    serial: true
+    plan:
+      - in_parallel:
+        - get: bosh-src
+          passed: [delivery]
+        - get: bosh-src-latest
+          resource: bosh-src
+        - get: bosh-cli
+        - get: main-ruby-go-image
+        - get: version
+          params:
+            bump: final
+      - task: prepare-release
+        image: main-ruby-go-image
+        file: bosh-src/ci/tasks/prepare-release.yml
+      - get: bosh-main
+      - task: finalize-release
+        image: main-ruby-go-image
+        file: bosh-src-latest-with-release-commit/ci/tasks/finalize-bosh-release.yml
+        params:
+          RELEASE_PRIVATE_YML: ((bosh_release_private_yml))
+      - put: bosh-src
+        params:
+          repository: bosh-src-latest-with-release-commit
+          tag: bosh-main-with-final/tag-name
+          annotate: bosh-main-with-final/annotate-msg
+          merge: true
+      - put: bosh-main
+        params:
+          repository: bosh-main
+          rebase: true
+      - put: bosh-github-release
+        params:
+          name: bosh-main/tag-name
+          tag: bosh-main/tag-name
+      - put: version
+        params:
+          file: version/version
+
+  - name: export-final-release
+    serial: true
+    plan:
+    - in_parallel:
+      - get: bosh-main
+      - get: version
+        passed: [finalize-release]
+        trigger: true
+      - get: warden-ubuntu-bionic
+        trigger: true
+      - get: docker-cpi-image
+    - task: export-final-release
+      image: docker-cpi-image
+      file: bosh-main/ci/tasks/export-final-release.yml
+      privileged: true
+      input_mapping:
+        stemcell: warden-ubuntu-bionic
+        bosh-src: bosh-main
+    - task: push-bosh-compiled-releases
+      file: bosh-main/ci/tasks/push-bosh-compiled-release.yml
+      input_mapping:
+        candidate-version: version
+        bosh-src: bosh-main
+      params:
+        AWS_ACCESS_KEY_ID: ((bosh-compiled-releases-aws-access-key-id))
+        AWS_SECRET_ACCESS_KEY: ((bosh-compiled-releases-aws-secret-access-key))
+        git_private_key: ((bosh-compiled-releases-index-deploy-key))
+
+  - name: bump-major
+    serial: true
+    plan:
+    - get: version
+      params:
+        bump: major
+    - put: version
+      params:
+        file: version/version
+
+  - name: bump-minor
+    serial: true
+    plan:
+    - get: version
+      params:
+        bump: minor
+    - put: version
+      params:
+        file: version/version
+
+  - name: bump-patch
+    serial: true
+    plan:
+    - get: version
+      params:
+        bump: patch
+    - put: version
+      params:
+        file: version/version
+
+  - name: build-main-ruby-go
+    public: true
+    serial: true
+    plan:
+      - get: weekly
+        trigger: true
+      - get: bosh-src
+      - get: bosh-src-dockerfiles
+        trigger: true
+      - put: main-ruby-go-image
+        params:
+          build: "bosh-src/ci/dockerfiles/main-ruby-go"
+        get_params:
+          skip_download: true
+
+  - name: build-main-postgres-9-4
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+      - get: bosh-src-dockerfiles
+        trigger: true
+      - get: integration-image
+        trigger: true
+        passed: [build-integration]
+      - put: main-postgres-9-4-image
+        params:
+          build: "bosh-src/ci/dockerfiles/main-postgres"
+          build_args:
+            DB_VERSION: "9.4"
+            BRANCH: ((branch_name))
+        get_params:
+          skip_download: true
+
+  - name: build-main-postgres-10
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+      - get: bosh-src-dockerfiles
+        trigger: true
+      - get: integration-image
+        trigger: true
+        passed: [build-integration]
+      - put: main-postgres-10-image
+        params:
+          build: "bosh-src/ci/dockerfiles/main-postgres"
+          build_args:
+            DB_VERSION: "10"
+            BRANCH: ((branch_name))
+        get_params:
+          skip_download: true
+
+  - name: build-main-mysql-5-7
+    public: true
+    serial: true
+    plan:
+      - get: bosh-src
+      - get: bosh-src-dockerfiles
+        trigger: true
+      - get: integration-image
+        trigger: true
+        passed: [build-integration]
+      - put: main-mysql-5-7-image
+        params:
+          build: "bosh-src/ci/dockerfiles/main-mysql"
+          build_args:
+            BRANCH: ((branch_name))
+        get_params:
+          skip_download: true
+
+  - name: build-integration
+    public: true
+    serial: true
+    plan:
+      - get: weekly
+        trigger: true
+      - get: bosh-src
+      - get: bosh-src-dockerfiles
+        trigger: true
+      - put: integration-image
+        params:
+          build: "bosh-src/ci/dockerfiles/integration"
+          build_args:
+            BRANCH: ((branch_name))
+        get_params:
+          skip_download: true
+
+  - name: build-docker-cpi
+    public: true
+    serial: true
+    plan:
+      - in_parallel:
+          - get: bosh-src
+          - get: bosh-src-dockerfiles
+            trigger: true
+          - get: bosh-cli
+            trigger: true
+          - get: bosh-deployment
+            trigger: true
+      - task: copy-dependencies
+        file: bosh-src/ci/tasks/prepare-container-docker-cpi-build-context.yml
+      - put: docker-cpi-image
+        params:
+          build: docker-build-context
+        get_params:
+          skip_download: true
+
+  - name: bump-packages
+    plan:
+    - in_parallel:
+      - get: bosh-src
+      - get: nginx-release
+        trigger: true
+    - task: bump-nginx-packages
+      file: nginx-release/ci/shared/bump-nginx-package.yml
+      input_mapping:
+        input_repo: bosh-src
+      output_mapping:
+        output_repo: bosh-src-out
+      params:
+        PACKAGES: [nginx]
+        PRIVATE_YML: ((bosh_release_private_yml))
+    - put: bosh-src
+      params:
+        repository: bosh-src-out
+        rebase: true
+
+resource_types:
+- name: terraform
+  type: docker-image
+  source:
+    repository: ljfranklin/terraform-resource
+
+- name: gcs-resource
+  type: docker-image
+  source:
+    repository: frodenas/gcs-resource
+
+- name: pivnet
+  type: docker-image
+  check_every: 168h
+  source:
+    repository: pivotalcf/pivnet-resource
+    tag: latest-final
+    username: ((docker.username))
+    password: ((docker.password))
+
+resources:
+  - name: weekly
+    type: time
+    source:
+      start: 3:00 -0700
+      stop: 4:30 -0700
+      days: [ Saturday ]
+
+  - name: bosh-src
+    type: git
+    source:
+      uri: ((bosh_src_url))
+      branch: ((branch_name))
+      private_key: ((github_deployment_key))
+
+  - name: bosh-src-dockerfiles
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh.git
+      paths:
+        - "ci/dockerfiles"
+
+  - name: bosh-github-release
+    type: github-release
+    source:
+      owner: cloudfoundry
+      repository: bosh
+      drafts: true
+      access_token: ((github_token))
+
+  - name: version
+    type: semver
+    source:
+      bucket: ((candidate_release_bucket))
+      key: version
+      access_key_id: ((candidate_release_access_key_id))
+      secret_access_key: ((candidate_release_secret_access_key))
+
+  - name: bosh-candidate-release-tarballs
+    type: s3
+    source:
+      bucket: ((candidate_release_bucket))
+      access_key_id: ((candidate_release_access_key_id))
+      secret_access_key: ((candidate_release_secret_access_key))
+      versioned_file: "bosh-dev-release.tgz"
+
+  - name: bosh-compiled-candidate-bionic
+    type: s3
+    source:
+      bucket: "bosh-compiled-candidate-tarballs"
+      access_key_id: ((bosh-compiled-releases-aws-access-key-id))
+      secret_access_key: ((bosh-compiled-releases-aws-secret-access-key))
+      regexp: "bosh-.*dev\\.(\\d+).*bionic.*.tgz"
+
+  - name: bosh-compiled-staging-tarballs
+    type: s3
+    source:
+      bucket: "bosh-compiled-staging-tarballs"
+      access_key_id: ((bosh-compiled-releases-aws-access-key-id))
+      secret_access_key: ((bosh-compiled-releases-aws-secret-access-key))
+      regexp: "bosh-.*dev\\.(\\d+).*bionic.*.tgz"
+
+  - name: bosh-disaster-recovery-acceptance-tests
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry-incubator/bosh-disaster-recovery-acceptance-tests.git
+      branch: master
+
+  - name: bbr-cli-binary
+    type: github-release
+    source:
+      owner: cloudfoundry-incubator
+      repository: bosh-backup-and-restore
+      access_token: ((github_token))
+
+  - name: integration-tests-parallel-runtime
+    type: s3
+    source:
+      bucket: ((integration_runtime_bucket))
+      access_key_id: ((integration_runtime_access_key_id))
+      secret_access_key: ((integration_runtime_secret_access_key))
+      versioned_file: "parallel_runtime_rspec.log"
+
+  - name: brats-terraform
+    type: terraform
+    source:
+      storage:
+        bucket: bosh-ci-terraform
+        bucket_path: brats-ci/
+        region_name: us-west-1
+        access_key_id: ((bosh-ci-database-terraform-aws-access-key-id))
+        secret_access_key: ((bosh-ci-database-terraform-aws-secret-access-key))
+
+  - name: zookeeper-release
+    type: git
+    source:
+      uri: https://github.com/cppforlife/zookeeper-release
+      branch: master
+
+  - name: bosh-main
+    type: git
+    source:
+      uri: ((bosh_src_url))
+      branch: main
+      private_key: ((github_deployment_key))
+
+  - name: bosh-cli
+    type: s3
+    source:
+      regexp: alpha-bosh-cli-(.*)-linux-amd64
+      bucket: ((bosh_cli_aws_s3_alpha_release_bucket))
+      region_name: ((bosh_cli_aws_s3_release_bucket_region))
+
+  - name: bosh-dns-release
+    type: bosh-io-release
+    source:
+      repository: cloudfoundry/bosh-dns-release
+
+  #
+  # BATS
+  #
+
+  - name: bats
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh-acceptance-tests.git
+      branch: master
+
+  - name: bosh-deployment
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh-deployment
+      branch: master
+
+  - name: nimbus-environment
+    source:
+      branch: master
+      pool: nimbus
+      private_key: ((github_deployment_key__bosh-cpi-environments))
+      uri: git@github.com:pivotal-cf-experimental/bats-concourse-pool.git
+    type: pool
+
+  - name: vsphere-esxi-ubuntu-bionic
+    type: bosh-io-stemcell
+    source:
+      name: bosh-vsphere-esxi-ubuntu-bionic-go_agent
+
+  - name: vsphere-esxi-ubuntu-xenial
+    type: pivnet
+    source:
+      api_token: ((pivnet_bot_api_token))
+      product_slug: stemcells-ubuntu-xenial
+
+  - name: aws-xen-hvm-ubuntu-bionic
+    type: bosh-io-stemcell
+    source:
+      name: bosh-aws-xen-hvm-ubuntu-bionic-go_agent
+
+  - name: warden-ubuntu-bionic
+    type: bosh-io-stemcell
+    source:
+      name: bosh-warden-boshlite-ubuntu-bionic-go_agent
+
+  - name: cpi-release
+    type: bosh-io-release
+    source:
+      repository: cloudfoundry/bosh-vsphere-cpi-release
+
+  - name: bosh-agent
+    type: git
+    source:
+      uri: https://github.com/cloudfoundry/bosh-agent
+      branch: main
+
+  - name: nginx-release
+    type: git
+    source:
+      uri: https://github.com/bosh-packages/nginx-release.git
+      branch: master
+
+  - name: tracker-output
+    type: tracker
+    source:
+      token: ((tracker_api_token))
+      project_id: ((tracker_project_id))
+      tracker_url: https://www.pivotaltracker.com
+
+  - name: main-ruby-go-image
+    type: docker-image
+    source:
+      repository: bosh/main-ruby-go
+      tag: ((branch_name))
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-mysql-5-7-image
+    type: docker-image
+    source:
+      repository: bosh/main-mysql-5.7
+      tag: ((branch_name))
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-postgres-9-4-image
+    type: docker-image
+    source:
+      repository: bosh/main-postgres-9.4
+      tag: ((branch_name))
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: main-postgres-10-image
+    type: docker-image
+    source:
+      repository: bosh/main-postgres-10
+      tag: ((branch_name))
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: docker-cpi-image
+    type: docker-image
+    source:
+      repository: bosh/docker-cpi
+      tag: ((branch_name))
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: integration-image
+    type: docker-image
+    source:
+      repository: bosh/integration
+      tag: ((branch_name))
+      email: ((dockerhub_email))
+      username: ((dockerhub_username))
+      password: ((dockerhub_password))
+
+  - name: terraform
+    type: terraform
+    source:
+      storage:
+        access_key_id:     ((aws_access_key__primary))
+        secret_access_key: ((aws_secret_key__primary))
+        bucket:            ((terraform_bucket))
+        bucket_path:       terraform-state
+        region_name: ((terraform_bucket_region))
+      vars:
+        access_key: ((aws_access_key__primary))
+        secret_key: ((aws_secret_key__primary))
+        region:     ((aws_region__primary))
+        ssh_public_key: ((aws_ssh_public_key))
+
+  - name: last-released-bosh-release
+    type: bosh-io-release
+    source:
+      repository: cloudfoundry/bosh
+      tarball: true

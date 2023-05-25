@@ -1,0 +1,69 @@
+---
+name: Test Director
+port: 8081
+
+logging:
+  level: ERROR
+
+dir: /tmp/boshdir
+director_certificate_expiry_json_path: /tmp/boshdir/certificate_expiry.json
+db:
+  adapter: sqlite
+  database: ':memory:'
+  connection_options:
+    max_connections: 32
+    pool_timeout: 10
+health_monitor:
+  port: 12345
+verify_multidigest_path: /some/path
+blobstore:
+  provider: davcli
+  options:
+    endpoint: http://127.0.0.1
+    user: admin
+    password:
+    davcli_path: true
+cpi_api_test_max_version: 2
+local_dns:
+  enabled: false
+  include_index: false
+snapshots:
+  enabled: false
+scan_and_fix:
+  auto_fix_stateful_nodes: false
+cloud:
+  plugin: dummy
+  properties:
+    dir: ...
+     # to be added
+user_management:
+  provider: local
+  local:
+    users:
+    - {name: admin, password: admin}
+config_server:
+  enabled: false
+record_events: true
+version: '0.0.2'
+mbus: 'nats://some-user:some-pass@some-nats-uri:1234'
+agent:
+  agent_wait_timeout: 1234
+  env:
+    bosh:
+      blobstores:
+      - provider: 'local'
+        options:
+          'blobstore_path': /path/to/blobstore
+      - provider: 'local'
+        options:
+          'blobstore_path': /path/to/blobstore
+cpi:
+  max_supported_api_version: 2
+  preferred_api_version: 2
+
+nats:
+  server_ca_path: '/path/to/server_ca_path'
+  client_certificate_path: '/path/to/director_certificate_path'
+  client_private_key_path: '/path/to/director_private_key_path'
+  client_ca_certificate_path: '/path/to/client_ca_certificate_path'
+  client_ca_private_key_path: '/path/to/client_ca_private_key_path'

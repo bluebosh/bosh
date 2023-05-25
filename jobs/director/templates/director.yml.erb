@@ -1,0 +1,375 @@
+<%=
+params = {
+  'name' => p('director.name'),
+  'runtime' => {
+    'ip' => spec.ip,
+    'instance' => "#{spec.job.name}/#{spec.id}",
+  },
+  'port' => p('director.backend_port'),
+  'max_tasks' => p('director.max_tasks'),
+  'max_threads' => p('director.max_threads'),
+  'puma_workers' => p('director.puma_workers'),
+  'logging' => {
+    'level' => p('director.log_level'),
+  },
+  'mbus' => "nats://#{p('nats.address')}:#{p('nats.port')}",
+  'director_certificate_expiry_json_path' => '/var/vcap/jobs/director/config/certificate_expiry.json',
+  'nats' => {
+    'server_ca_path' => '/var/vcap/jobs/director/config/nats_server_ca.pem',
+    'client_ca_certificate_path' => '/var/vcap/jobs/director/config/nats_client_ca_certificate.pem',
+    'client_ca_private_key_path' => '/var/vcap/jobs/director/config/nats_client_ca_private_key',
+    'client_certificate_path' => '/var/vcap/jobs/director/config/nats_client_certificate.pem',
+    'client_private_key_path' => '/var/vcap/jobs/director/config/nats_client_private_key',
+  },
+  'dir' => '/var/vcap/store/director',
+  'snapshots' => {
+    'enabled'=> p('director.enable_snapshots')
+  },
+  'max_vm_create_tries' => p('director.max_vm_create_tries'),
+  'enable_nats_delivered_templates' => p('director.enable_nats_delivered_templates'),
+  'enable_cpi_resize_disk' => p('director.enable_cpi_resize_disk'),
+  'generate_vm_passwords' => p('director.generate_vm_passwords'),
+  'remove_dev_tools' => p('director.remove_dev_tools'),
+  'log_access_events' => p('director.log_access_events'),
+  'flush_arp' => p('director.flush_arp'),
+  'networks' => {
+      'enable_cpi_management' => p('director.networks.enable_cpi_management'),
+  },
+  'local_dns' => {
+      'enabled' => p('director.local_dns.enabled'),
+      'include_index' => p('director.local_dns.include_index'),
+      'use_dns_addresses' => p('director.local_dns.use_dns_addresses'),
+  },
+  'audit_log_path' => '/var/vcap/sys/log/director',
+  'parallel_problem_resolution' => p('director.parallel_problem_resolution', true),
+  'metrics_server' => {
+    'enabled' => p('director.metrics_server.enabled'),
+    'port' => p('director.metrics_server.port'),
+  },
+  'health_monitor' => {
+    'port' => p('hm.http.port')
+  },
+}
+
+director_db = {
+  'adapter' => p('director.db.adapter'),
+  'user' => p('director.db.user'),
+  'password' => p('director.db.password'),
+  'host' => p('director.db.host'),
+  'port' => p('director.db.port'),
+  'database' => p('director.db.database'),
+  'connection_options' => p('director.db.connection_options'),
+  'tls' => {
+    'enabled' => p('director.db.tls.enabled', false),
+    'cert' => {
+      'ca' => '/var/vcap/jobs/director/config/db/ca.pem',
+      'certificate' => '/var/vcap/jobs/director/config/db/client_certificate.pem',
+      'private_key' => '/var/vcap/jobs/director/config/db/client_private_key.key',
+    },
+    'bosh_internal' => {
+      'ca_provided' => false,
+      'mutual_tls_enabled' => false,
+    }
+  }
+}
+
+if_p('director.db.tls.cert.ca') do
+  director_db['tls']['bosh_internal']['ca_provided'] = true
+end
+
+if_p('director.db.tls.cert.certificate', 'director.db.tls.cert.private_key') do
+  director_db['tls']['bosh_internal']['mutual_tls_enabled'] = true
+end
+
+params['db'] = director_db
+
+config_server = {
+    'enabled' => p('director.config_server.enabled')
+}
+if config_server['enabled']
+ config_server['url'] = p('director.config_server.url')
+ config_server['ca_cert_path'] = '/var/vcap/jobs/director/config/config_server_ca.cert'
+
+ config_server['uaa'] = {
+    'url' => p('director.config_server.uaa.url'),
+    'client_id' => p('director.config_server.uaa.client_id'),
+    'client_secret' => p('director.config_server.uaa.client_secret'),
+    'ca_cert_path' => '/var/vcap/jobs/director/config/uaa_server_ca.cert'
+ }
+end
+params['config_server'] = config_server
+
+params['scheduled_jobs'] = []
+
+if_p('director.snapshot_schedule') do |snapshot_schedule|
+  params['scheduled_jobs'] << {
+    'command' => 'SnapshotDeployments',
+    'schedule' =>  snapshot_schedule
+  }
+end
+
+if_p('director.self_snapshot_schedule') do |self_snapshot_schedule|
+  params['scheduled_jobs'] << {
+    'command' => 'SnapshotSelf',
+    'schedule' =>  self_snapshot_schedule
+  }
+end
+
+params['scheduled_jobs'] << {
+  'command' => 'ScheduledOrphanedVMCleanup',
+  'schedule' => p('director.vms.cleanup_schedule')
+}
+
+params['scheduled_jobs'] << {
+  'command' => 'ScheduledOrphanedDiskCleanup',
+  'schedule' => p('director.disks.cleanup_schedule'),
+  'params' => [{'max_orphaned_age_in_days' => p('director.disks.max_orphaned_age_in_days')}]
+}
+
+params['scheduled_jobs'] << {
+  'command' => 'ScheduledOrphanedNetworkCleanup',
+  'schedule' => p('director.networks.cleanup_schedule'),
+  'params' => [{'max_orphaned_age_in_days' => p('director.networks.max_orphaned_age_in_days')}]
+}
+
+params['scheduled_jobs'] << {
+  'command' => 'ScheduledDnsBlobsCleanup',
+  'schedule' => '0 0,30 * * * * UTC', #every 30 min
+  'params' => [{'max_blob_age' => 3600, 'num_dns_blobs_to_keep' => 10}]
+}
+
+params['scheduled_jobs'] << {
+  'command' => 'ScheduledTasksCleanup',
+  'schedule' => p('director.tasks_cleanup_schedule')
+}
+
+params['record_events'] = p('director.events.record_events')
+if params['record_events']
+  params['scheduled_jobs'] << {
+    'command' => 'ScheduledEventsCleanup',
+    'schedule' => p('director.events.cleanup_schedule'),
+    'params' => [{'max_events' => p('director.events.max_events')}]
+  }
+end
+
+if_p('director.debug.keep_unreachable_vms') do |keep_unreachable_vms|
+  params['keep_unreachable_vms'] = keep_unreachable_vms
+end
+
+if_p('director.enable_virtual_delete_vms') do |enable_virtual_delete_vms|
+  params['enable_virtual_delete_vms'] = enable_virtual_delete_vms
+end
+
+params['scan_and_fix'] = {
+  'auto_fix_stateful_nodes' => p('director.auto_fix_stateful_nodes')
+}
+
+if_p('dns.db.adapter', 'dns.db.user', 'dns.db.password', 'dns.db.host',
+     'dns.db.port', 'dns.db.database', 'dns.db.connection_options', 'dns.address') do
+  |adapter, user, password, db_host, port, database, connection_options, address|
+  params['dns'] = {
+    'server' => address,
+    'flush_command' => '/var/vcap/jobs/powerdns/bin/powerdns_ctl flush',
+    'db' => {
+        'adapter' => adapter,
+        'user' => user,
+        'password' => password,
+        'host' => db_host,
+        'port' => port,
+        'database' => database,
+        'connection_options' => connection_options
+     }
+  }
+
+  if_p('dns.domain_name') do |domain_name|
+    params['dns']['domain_name'] = domain_name
+  end
+end.else do
+  if_p('dns.domain_name') do |domain_name|
+    params['dns'] = {
+      'domain_name' => domain_name
+    }
+  end
+end
+
+if p('blobstore.provider') == 's3'
+  blobstore_options = {
+    'bucket_name' => p('blobstore.bucket_name'),
+    'credentials_source' => p('blobstore.credentials_source', 'static'),
+    'access_key_id' => p('blobstore.access_key_id', nil),
+    'secret_access_key' => p('blobstore.secret_access_key', nil),
+    'region' => p('blobstore.s3_region', nil),
+    'enable_signed_urls' => p('blobstore.enable_signed_urls'),
+    'host_style' => p('blobstore.s3_host_style', false)
+  }
+
+  if_p('blobstore.use_ssl') do |use_ssl|
+     blobstore_options['use_ssl'] = use_ssl
+  end
+
+  if_p('blobstore.s3_port') do |s3_port|
+     blobstore_options['port'] = s3_port
+  end
+
+  if_p('blobstore.host') do |host|
+     blobstore_options['host'] = host
+  end
+
+  if_p('blobstore.ssl_verify_peer') do |ssl_verify_peer|
+     blobstore_options['ssl_verify_peer'] = ssl_verify_peer
+  end
+
+  if_p('blobstore.s3_signature_version') do |s3_signature_version|
+     blobstore_options['signature_version'] = s3_signature_version
+  end
+
+  if_p('blobstore.server_side_encryption') do |server_side_encryption|
+     blobstore_options['server_side_encryption'] = server_side_encryption
+  end
+
+  if_p('blobstore.sse_kms_key_id') do |sse_kms_key_id|
+     blobstore_options['sse_kms_key_id'] = sse_kms_key_id
+  end
+elsif p('blobstore.provider') == 'gcs'
+    blobstore_options = {
+    'bucket_name' => p('blobstore.bucket_name'),
+    'credentials_source' => p('blobstore.credentials_source', 'static'),
+    'json_key' => p('blobstore.json_key', nil),
+    'enable_signed_urls' => p('blobstore.enable_signed_urls')
+  }
+
+  if_p('blobstore.storage_class') do |storage_class|
+     blobstore_options['storage_class'] = storage_class
+  end
+
+  if_p('blobstore.encryption_key') do |encryption_key|
+     blobstore_options['encryption_key'] = encryption_key
+  end
+else
+  blobstore_options = {
+    'endpoint' => "https://#{p('blobstore.address')}:#{p('blobstore.port')}",
+    'user' => p('blobstore.director.user'),
+    'password' => p('blobstore.director.password'),
+    'tls' => {
+        'cert' => {
+            'ca' => p('blobstore.tls.cert.ca')
+        }
+    },
+    'enable_signed_urls' => p('blobstore.enable_signed_urls')
+  }
+
+  blobstore_options['secret'] = p('blobstore.secret') if p('blobstore.enable_signed_urls')
+end
+
+params['blobstore'] = {
+  'provider' => p('blobstore.provider'),
+  'options' => blobstore_options,
+}
+
+params['verify_multidigest_path'] = '/var/vcap/packages/verify_multidigest/bin/verify-multidigest'
+
+params['version'] = '271.20.0'
+
+if p('blobstore.provider') == "s3"
+   params['blobstore']['provider'] = "s3cli"
+   params['blobstore']['options']['s3cli_config_path'] = "/var/vcap/data/director/tmp"
+   params['blobstore']['options']['s3cli_path'] = "/var/vcap/packages/s3cli/bin/s3cli"
+end
+
+if p('blobstore.provider') == "gcs"
+   params['blobstore']['provider'] = "gcscli"
+   params['blobstore']['options']['gcscli_config_path'] = "/var/vcap/data/director/tmp"
+   params['blobstore']['options']['gcscli_path'] = "/var/vcap/packages/bosh-gcscli/bin/bosh-gcscli"
+end
+
+if p('blobstore.provider') == "dav"
+   params['blobstore']['provider'] = "davcli"
+   params['blobstore']['options']['davcli_config_path'] = "/var/vcap/data/director/tmp"
+   params['blobstore']['options']['davcli_path'] = "/var/vcap/packages/davcli/bin/davcli"
+end
+
+user_management = {
+    'provider' => p('director.user_management.provider')
+}
+
+if p('director.user_management.provider') == 'uaa'
+  options = {
+    'url' => p('director.user_management.uaa.url', nil),
+    'urls' => p('director.user_management.uaa.urls', nil),
+    'symmetric_key' => p('director.user_management.uaa.symmetric_key', nil),
+    'public_key' => p('director.user_management.uaa.public_key', nil)
+  }
+
+  if options['url'].nil? && options['urls'].nil?
+    raise 'UAA provider requires either url or urls key'
+  end
+
+  if options['url'] && options['urls']
+    raise 'UAA provider takes either url or urls key'
+  end
+
+  if options['url']
+    options.delete('urls')
+  elsif options['urls']
+    options.delete('url')
+  end
+
+  if options['symmetric_key'].nil? && options['public_key'].nil?
+    raise 'UAA provider requires symmetric or public key'
+  end
+
+  user_management['uaa'] = options
+else
+  # making optional for backwards compatibility with micro bosh plugin
+  user_management['local'] = {
+    'users' => p('director.user_management.local.users', [])
+  }
+end
+
+params['ignore_missing_gateway'] = p('director.ignore_missing_gateway')
+params['user_management'] = user_management
+params['trusted_certs'] = p('director.trusted_certs')
+
+if_p('director.default_ssh_options.gateway_host',
+        'director.default_ssh_options.gateway_user') do |gateway_host, gateway_user|
+  params['default_ssh_options'] = {
+    'gateway_host' => gateway_host,
+    'gateway_user' => gateway_user
+  }
+end
+
+if_p('director.log_access_events_to_syslog') do |_|
+  raise 'property director.log_access_events_to_syslog has been removed. Please use director.log_access_events instead.'
+end
+
+cpi_job_name = p('director.cpi_job')
+
+cpi = {
+  'max_supported_api_version' => 2,
+  'preferred_api_version' => 2,
+}
+
+if_p('director.cpi.preferred_api_version') do |preferred_api_version|
+  raise "Max supported api version is #{cpi['max_supported_api_version']} but got #{preferred_api_version}" if preferred_api_version > cpi['max_supported_api_version']
+  raise "Min supported api version is 1 but got #{preferred_api_version}" if preferred_api_version < 1
+  cpi['preferred_api_version'] = preferred_api_version
+end
+
+params['cpi'] = cpi
+
+params['cloud'] = {
+    'provider' => {
+      'name' => cpi_job_name,
+      'path' => "/var/vcap/jobs/#{cpi_job_name}/bin/cpi",
+    },
+    'properties' => {}
+}
+
+params['agent'] = {
+  'env' => {
+    'bosh' => p('agent.env.bosh')
+  }
+}
+
+JSON.dump(params)
+%>

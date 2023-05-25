@@ -1,0 +1,13 @@
+---
+name: registry
+dependencies:
+- libpq
+- mysql
+- ruby-3.1.0-r0.81.0  
+
+files:
+- bosh_common/**/*
+- bosh-registry/**/*
+- vendor/cache/*.gem
+- vendor/cache/eventmachine-*/**
+- vendor/cache/extensions/**

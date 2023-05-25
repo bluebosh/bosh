@@ -1,0 +1,456 @@
+---
+name: director
+
+templates:
+  bbr_backup: bin/bbr/backup
+  bbr_config.json.erb: config/bbr.json
+  bbr_restore: bin/bbr/restore
+  bpm.yml: config/bpm.yml
+  certificate_expiry.json.erb: config/certificate_expiry.json
+  config_server_ca.cert.erb: config/config_server_ca.cert
+  console: bin/console
+  db_ca.pem.erb: config/db/ca.pem
+  db_client_certificate.pem.erb: config/db/client_certificate.pem
+  db_client_private_key.key.erb: config/db/client_private_key.key
+  director.key.erb: config/ssl/director.key
+  director.pem.erb: config/ssl/director.pem
+  director.yml.erb: config/director.yml
+  director: bin/director
+  drain: bin/drain
+  env.erb: env
+  indicator.yml.erb: config/indicator.yml
+  metrics-server: bin/metrics-server
+  metrics_server_ca.pem.erb: config/metrics_server/ca.pem
+  metrics_server_certificate.pem.erb: config/metrics_server/certificate.pem
+  metrics_server_private_key.key.erb: config/metrics_server/private_key.key
+  mime.types: config/mime.types
+  nats_client_ca_certificate.pem.erb: config/nats_client_ca_certificate.pem
+  nats_client_ca_private_key.erb: config/nats_client_ca_private_key
+  nats_client_certificate.pem.erb: config/nats_client_certificate.pem
+  nats_client_private_key.erb: config/nats_client_private_key
+  nats_server_ca.pem.erb: config/nats_server_ca.pem
+  nginx.conf.erb: config/nginx.conf
+  post-start.erb: bin/post-start
+  pre-start.erb: bin/pre-start
+  ps_utils.sh: bin/ps_utils.sh
+  scheduler: bin/scheduler
+  sync-dns: bin/sync-dns
+  task_logrotate.cron: config/task_logrotate.cron
+  task_logrotate.sh: bin/task_logrotate
+  trigger-one-time-sync-dns: bin/trigger-one-time-sync-dns
+  uaa_server_ca.cert.erb: config/uaa_server_ca.cert
+  utils.sh: helpers/utils.sh
+  worker_ctl.erb: bin/worker_ctl
+
+packages:
+- director
+- nginx
+- libpq
+- postgres-9.4
+- mysql
+- ruby-3.1.0-r0.81.0
+- s3cli
+- davcli
+- bosh-gcscli
+- verify_multidigest
+
+properties:
+  env.http_proxy:
+    description: HTTP proxy that the director, scheduler and workers should use
+  env.https_proxy:
+    description: HTTPS proxy that the director, scheduler and workers should use
+  env.no_proxy:
+    description: List of comma-separated hosts that should skip connecting to the proxy in the director, scheduler and workers
+  director.name:
+    description: Name of the director
+  director.port:
+    description: Port that the director nginx listens on
+    default: 25555
+  director.ipv6_listen:
+    description: Enable binding to IPv6 addresses
+    default: false
+  director.backend_port:
+    description: Port that the director listens on
+    default: 25556
+  director.workers:
+    description: Number of director workers
+    default: 3
+  director.enable_dedicated_status_worker:
+    description: "Separate worker for 'bosh vms' and 'bosh ssh'"
+    default: false
+  director.puma_workers:
+    description: Number of puma workers
+    default: 3
+  director.nginx.workers:
+    description: Number of nginx workers for director
+    default: 2
+  director.nginx.ssl_prefer_server_ciphers:
+    description: "Prefer server's cipher priority instead of client's (true for On, false for Off)"
+    default: true
+  director.nginx.ssl_protocols:
+    description: "SSL/TLS protocols to allow"
+    default: TLSv1.2
+  director.nginx.ssl_ciphers:
+    description: "List of SSL ciphers to allow (format: https://www.openssl.org/docs/manmaster/man1/ciphers.html - CIPHER LIST FORMAT section)"
+    default: "DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK"
+  director.nginx.enable_metrics_endpoint:
+    description: Expose basic nginx metrics on localhost:<director.port>/stats endpoint. Uses the ngx_http_stub_status_module (see http://nginx.org/en/docs/http/ngx_http_stub_status_module.html).
+    default: false
+  director.timeout:
+    description: Timeout for connection from bosh CLI to nginx
+    default: 7200
+  director.proxy_timeout:
+    description: Timeout for proxy connection from nginx to director
+    default: 900
+  director.max_upload_size:
+    description: Max allowed file size for upload
+    default: 10000m
+  director.ssl.cert:
+    description: SSL Certificate for director (PEM encoded)
+  director.ssl.key:
+    description: SSL private key for director (PEM encoded)
+  director.tasks_cleanup_schedule:
+    description: Schedule cleanup of tasks and their log files, keeping `max_tasks`
+    default: '0 0 0 */7 * * UTC'  # once every 7 days at midnight UTC
+  director.max_tasks:
+    description: Max number of tasks per each type to keep in disk
+    default: 2000
+  director.max_threads:
+    description: Max number of director concurrent threads
+    default: 32
+  director.enable_cpi_resize_disk:
+    description: Enable/Disable native CPI disk resizing (true|false)
+    default: false
+  director.enable_snapshots:
+    description: Enable/Disable snapshots for persistent disks (true|false)
+    default: false
+  director.snapshot_schedule:
+    description: RufusScheduler cron formatted schedule for snapshots
+    default: '0 0 7 * * * UTC'
+  director.self_snapshot_schedule:
+    description: RufusScheduler cron formatted schedule for self snapshots
+    default: '0 0 6 * * * UTC'
+  director.auto_fix_stateful_nodes:
+    description: Enable/Disable auto resolution for stateful nodes for scan_and_fix (true|false)
+    default: true
+  director.max_vm_create_tries:
+    description: Max retries when creating VMs
+    default: 5
+  director.debug.keep_unreachable_vms:
+    description: When a bosh deploy fails, the failed VM will be kept instead of destroyed
+    default: false
+  director.enable_post_deploy:
+    description: When true, all templates will run their post_deploy script once deployment is complete
+    default: true
+  director.enable_nats_delivered_templates:
+    description: When true, rendered templates will be sent over NATs
+    default: false
+  director.generate_vm_passwords:
+    description: When true, a random unique password will be used for each vm if user has not specified a password
+    default: false
+  director.remove_dev_tools:
+    description: When true, remove dev tool packages from non-compilation VMs
+    default: false
+  director.log_level:
+    description: Log level
+    default: debug
+  director.log_access_events_to_syslog:
+    description: Removed. Please use director.log_access_events instead.
+  director.log_access_events:
+    description: Access to api is logged in CEF format
+    default: false
+  director.flush_arp:
+    description: Clear up arp entries when machines are recreated
+    default: false
+  director.networks.enable_cpi_management:
+    description: Enables bosh managed networks
+    default: false
+  director.enable_virtual_delete_vms:
+    description: When true, bosh will not delete vm from cloud when instance update, just destroy vm record in db
+    default: false
+  director.local_dns.enabled:
+    description: Enables local DNS, i.e., sending sync_dns messages with all names/IPs to all agents managed by this director
+    default: false
+  director.local_dns.include_index:
+    description: If local DNS is enabled, then include_index will cause director to propagate dns records with instance index number as well as dns records with instance ID
+    default: false
+  director.local_dns.use_dns_addresses:
+    description: When true, address references in rendered templates will evaluate to DNS entries rather than IP addresses
+    default: false
+  director.parallel_problem_resolution:
+    description: When true, problems (e.g. resurrection, disk reattaching) are resolved in parallel
+    default: true
+
+  director.cpi.preferred_api_version:
+    description: The preferred api version to use when communicating with the CPI. If specified greater than the max supported version it will only communicate via the highest available api version.
+
+  #Orphaned disk and orphaned snapshot automated cleanup
+  director.disks.max_orphaned_age_in_days:
+    description: Days to keep orphaned disks and orphaned snapshots before cleanup
+    default: 5
+  director.disks.cleanup_schedule:
+    description: RufusScheduler cron formatted schedule for cleanup of orphaned disks and orphaned snapshots
+    default: '0 0,30 * * * * UTC' #every 30min
+
+  #Orphaned Networks automated cleanup
+  director.networks.max_orphaned_age_in_days:
+    description: Days to keep orphaned networks before cleanup
+    default: 1
+  director.networks.cleanup_schedule:
+    description: RufusScheduler cron formatted schedule for cleanup of orphaned networks
+    default: '0 0,30 * * * * UTC' #every 30min
+
+  #Orphaned VMs automated cleanup
+  director.vms.cleanup_schedule:
+    description: RufusScheduler cron formatted schedule for cleanup of orphaned vms
+    default: '*/5 * * * * UTC' #every 5min
+
+  # Config Server
+  director.config_server.enabled:
+    description: 'When true, replace substitution values in manifest with values from Config Server'
+    default: false
+  director.config_server.url:
+    description: 'URL for the Config Server'
+  director.config_server.ca_cert:
+    description: 'CA cert to trust when communicating with Config Server'
+  director.config_server.uaa.url:
+    description: 'URL for the UAA server used for authenticating access to Config Server'
+  director.config_server.uaa.client_id:
+    description: 'UAA client id to access Config Server'
+  director.config_server.uaa.client_secret:
+    description: 'UAA client secret to access Config Server'
+  director.config_server.uaa.ca_cert:
+    description: 'CA cert to trust when communicating with UAA'
+
+  # Director User Management
+  director.user_management.provider:
+    description: 'User management implementation (local|uaa)'
+    default: local
+  director.user_management.uaa.url:
+    description: 'Uaa URL, specify either the url or the urls attribute'
+  director.user_management.uaa.urls:
+    description: 'List of Uaa URLs, specify either the url or the urls attribute'
+  director.user_management.uaa.symmetric_key:
+    description: 'Symmetric key to verify Uaa token'
+  director.user_management.uaa.public_key:
+    description: 'Public key to verify Uaa token when token is encoded with asymmetric encryption'
+  director.user_management.local.users:
+    description: 'List of users that can authenticate with director in non-Uaa mode'
+
+  # Default SSH Gateway Settings
+  director.default_ssh_options.gateway_host:
+    description: 'Default host to use as ssh gateway with bosh ssh command'
+  director.default_ssh_options.gateway_user:
+    description: 'Default user to use with bosh ssh command'
+    default: vcap
+
+  # Metrics
+  director.metrics_server.enabled:
+    description: 'Enables the metrics server on the director'
+    default: false
+  director.metrics_server.listen_on_external_interface:
+    description: 'Exposes the directors metrics server on an external interface. Requires the use of mutual auth TLS'
+    default: true
+  director.metrics_server.port:
+    description: 'External Port for nginx to listen for metrics server'
+    default: 9091
+  director.metrics_server.backend_port:
+    description: 'Internal port for metrics server to listen to'
+    default: 9092
+  director.metrics_server.tls.ca:
+    description: CA certificate for mutual TLS connections to an external metrics server
+  director.metrics_server.tls.certificate:
+    description: Client certificate for mutual TLS connections to an external metrics server
+  director.metrics_server.tls.private_key:
+    description: Client private key for mutual TLS connections to an external metrics server
+
+  # NATs
+  nats.address:
+    description: Address of the nats server
+  nats.port:
+    description: Port that the nats server listens on
+    default: 4222
+  nats.tls.ca:
+    description: 'CA cert to trust when communicating with NATS server'
+  nats.tls.client_ca.certificate:
+    description: Certificate for NATs mutual TLS (Director uses to generate Agent cert)
+  nats.tls.client_ca.private_key:
+    description: Private Key for NATs mutual TLS (Director uses to generate Agent cert)
+  nats.tls.director.certificate:
+    description: |
+      Certificate for NATs mutual TLS client (Director client). The Common-Name for this certificate
+      should be "default.director.bosh-internal"
+  nats.tls.director.private_key:
+    description: Private Key for NATs mutual TLS client (Director client)
+
+  # Director Database
+  director.db.adapter:
+    description: The type of database used (mysql2|postgres|sqlite)
+    default: postgres
+  director.db.user:
+    description: Username used for the director database
+    default: bosh
+  director.db.password:
+    description: Password used for the director database
+  director.db.host:
+    description: |
+      Address of the director database, for example, in the case of AWS RDS:
+      rds-instance-name.coqxxxxxxxxx.us-east-1.rds.amazonaws.com
+    default: 127.0.0.1
+  director.db.port:
+    description: Port of the director database (e.g, msyql2 adapter would generally use 3306)
+    default: 5432
+  director.db.database:
+    description: Name of the director database
+    default: bosh
+  director.db.connection_options:
+    description: Additional options for the database
+    default:
+      max_connections: 32  #Maximum size of the connection pool
+      pool_timeout: 10     #Number of seconds to wait if a connection cannot be acquired before  raising an error
+  director.db.tls.enabled:
+    description: Flag for enabling tls for database
+    default: false
+  director.db.tls.cert.ca:
+    description: Database CA certificate
+  director.db.tls.cert.certificate:
+    description: Client certificate for mutual TLS connections to DB
+  director.db.tls.cert.private_key:
+    description: Client private key for mutual TLS connections to DB
+  director.db.tls.skip_host_verify:
+    description: Skip host verification for Server CA certificate. Must be true if database is hosted on GCP.
+    default: false
+
+  # DNS
+  dns.address:
+    description: Address of the powerdns server
+  dns.domain_name:
+    description: TLD of the dns zone used by bosh
+    default: bosh
+  dns.db.adapter:
+    description: DNS Database adapter
+    default: postgres
+  dns.db.user:
+    description: DNS Database user
+    default: bosh
+  dns.db.password:
+    description: DNS Database password
+  dns.db.host:
+    description: DNS Database host
+    default: 127.0.0.1
+  dns.db.port:
+    description: Port that the powerdns database listens on
+    default: 5432
+  dns.db.database:
+    description: Name of the powerdns database
+    default: bosh
+  dns.db.connection_options:
+    description: Additional options for the powerdns database
+    default:
+      max_connections: 32  #Maximum size of the connection pool
+      pool_timeout: 10     #Number of seconds to wait if a connection cannot be acquired before  raising an error
+
+  # Events
+  director.events.record_events:
+    description: Enable recording of events to the database and audit logs
+    default: false
+  director.events.max_events:
+    description: Max number of events to keep
+    default: 10000
+  director.events.cleanup_schedule:
+    description: RufusScheduler cron formatted schedule for cleanup of events
+    default: '0 * * * * UTC'
+
+  # Blobstore
+  blobstore.provider:
+    description: Provider of the blobstore used by director and agent (dav|simple|s3|gcs)
+    default: 'dav'
+  blobstore.s3_region:
+    description: Region of the blobstore used by s3 blobstore plugin
+  blobstore.bucket_name:
+    description: AWS S3 or GCP GCS Bucket used by external blobstore plugin
+  blobstore.credentials_source:
+    description: AWS or GCP Credential Source (static / env_or_profile / none)
+    default: 'static'
+  blobstore.access_key_id:
+    description: AWS access_key_id used by s3 blobstore plugin
+  blobstore.secret_access_key:
+    description: AWS secret_access_key used by s3 blobstore plugin
+  blobstore.json_key:
+    description: Contents of a GCP JSON service account file used for static credentials_source (optional)
+  blobstore.address:
+    description: Address of blobstore server used by simple blobstore plugin
+  blobstore.port:
+    description: Port of blobstore server used by simple blobstore plugin
+    default: 25250
+  blobstore.host:
+    description: Host of blobstore server used by simple blobstore plugin
+  blobstore.use_ssl:
+    description: Whether the simple blobstore plugin should use SSL to connect to the blobstore server
+    default: true
+  blobstore.s3_host_style:
+    description: Whether to use host-style urls instead of path-style urls
+    default: false
+  blobstore.s3_port:
+    description: Port of blobstore server used by s3 blobstore plugin
+    default: 443
+  blobstore.ssl_verify_peer:
+    description: Verify the SSL certificate used on the blobstore?
+    default: true
+  blobstore.s3_signature_version:
+    description: Signature version of the blobstore used by s3 blobstore plugin (optional, if not provided the s3 client decides which version to use)
+  blobstore.server_side_encryption:
+    description: Server-side encryption algorithm used when storing blobs in S3 (Optional - "AES256"|"aws:kms")
+  blobstore.sse_kms_key_id:
+    description: AWS KMS key ID to use for object encryption. All GET and PUT requests for an object protected by AWS KMS will fail if not made via SSL or using SigV4.
+  blobstore.storage_class:
+    description: Storage Class used when storing blobs in GCS (optional, if not provided uses bucket default)
+  blobstore.encryption_key:
+    description: Customer-Supplied Encryption key used when storing blobs in GCS (Optional - Base64 encoded 32 byte key)
+  blobstore.director.user:
+    description: Username director uses to connect to blobstore used by simple blobstore plugin
+  blobstore.director.password:
+    description: Password director uses to connect to blobstore used by simple blobstore plugin
+  blobstore.tls.cert.ca:
+    description: CA Cert for TLS communcation with blobstore
+  blobstore.enable_signed_urls:
+    description: Use pre-signed urls for blobstore so that deployed VMs do not require blobstore credentials
+    default: false
+  blobstore.secret:
+    description: Secret used for HMAC signature for pre-signed urls
+
+  director.ignore_missing_gateway:
+    description: Allow gateway to be omitted from subnet configuration. Boshlite vms(containers) do not require gateway.
+    default: false
+
+  director.trusted_certs:
+    description: Cerfiticates that VMs created by this director should trust in addition to those packaged with the stemcell (PEM encoded; zero or more certs allowed)
+    default: ''
+
+  # Cpi
+  director.cpi_job:
+    description: Name of cpi job (null to use bundled cpi gems)
+  agent.nats.address:
+    description: Address for agent to connect to nats
+  agent.env.bosh:
+    description: Base env for agent
+    default: {}
+  registry.address:
+    description: Address of the Registry to connect to
+  registry.port:
+    description: Port of the Registry to connect to
+    default: 25777
+  registry.username:
+    description: User to access the Registry
+  registry.password:
+    description: Password to access the Registry
+
+  # Indicators
+  # Indicators are meant to be consumed by downstream services, bosh does not send any alerts based on the indicators
+  indicators.queued_tasks_threshold:
+    description: Amount of tasks queued for a certain time before alerts are sent
+    default: 10
+
+  hm.http.port:
+    description: TCP where health monitor is
+    default: 25923
